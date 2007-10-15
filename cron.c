@@ -18,60 +18,6 @@ crontab *tabs = 0;
 int    nrtabs = 0;
 int    sztabs = 0;
 
-#define EXPAND(t,s,n)	if (n >= s) { \
-			    s = n ? (n * 10) : 200; \
-			    t = t ? realloc(t, s * (sizeof t[0]) ) \
-				  :    malloc( s * (sizeof t[0]) ); }
-
-typedef void (*ef)(Evmask*,int);
-
-typedef struct {
-    int min;
-    int max;
-    char *units;
-    ef setter;
-} constraint;
-
-void
-sminute(Evmask *mask, int min)
-{
-    if (min >= 32)
-	mask->minutes[1] |= 1 << (min-32);
-    else
-	mask->minutes[0] |= 1 << (min);
-}
-
-void
-shour(Evmask *mask, int hour)
-{
-    mask->hours |= 1 << (hour);
-}
-
-void
-smday(Evmask *mask, int mday)
-{
-    mask->mday |= 1 << (mday);
-}
-
-void
-smonth(Evmask *mask, int month)
-{
-    mask->month |= 1 << (month);
-}
-
-void
-swday(Evmask *mask, int wday)
-{
-    if (wday == 0) wday = 7;
-    mask->wday |= 1 << (wday);
-}
-
-
-constraint minutes = { 0, 59, "minutes", sminute };
-constraint hours =   { 0, 23, "hours", shour };
-constraint mday =    { 0, 31, "day of the month", smday };
-constraint months =  { 1, 12, "months",  smonth };
-constraint wday =    { 0,  7, "day of the week", swday };
 
 char*
 firstnonblank(char *s)
@@ -91,6 +37,7 @@ error(char *fmt, ...)
     if (interactive) {
 	vfprintf(stderr, fmt, ptr);
 	fputc('\n',stderr);
+	exit(1);
     }
     else
 	vsyslog(LOG_ERR, fmt, ptr);
@@ -107,7 +54,7 @@ fgetlol(FILE *f)
     register c;
 
     while ( (c = fgetc(f)) != EOF ) {
-	EXPAND(line,szl,nrl)
+	EXPAND(line,szl,nrl);
 
 	if ( c == '\n' ) {
 	    if (nrl && (line[nrl-1] == '\\')) {
@@ -129,131 +76,14 @@ fgetlol(FILE *f)
 }
 
 
-int
-constrain(int num, constraint *limit)
-{
-    return (num >= limit->min) || (num <= limit->max);
-}
-
-
-int
-number(char **s, constraint *limit)
-{
-    int num;
-    char *e;
-
-    num = strtoul(*s, &e, 10);
-    if (e == *s) {
-	error("badly formed %s string (%s) ", limit ? limit->units : "time", e);
-	return 0;
-    }
-
-    if (limit) {
-	if (constrain(num, limit) == 0) {
-	    error("bad number in %s", limit->units);
-	    return 0;
-	}
-    }
-    *s = e;
-    return num;
-}
-
-
 void
-assign(int time, Evmask *mask, ef setter)
-{
-    (*setter)(mask, time);
-}
-
-
-char *
-parse(char *s, cron *job, constraint *limit)
-{
-    int num, num2, skip;
-
-    if (s == 0)
-	return 0;
-
-    do {
-	skip = 0;
-	num2 = 0;
-
-	if (*s == '*') {
-	    num = limit->min;
-	    num2 = limit->max;
-	    ++s;
-	}
-	else {
-	    num = number(&s,limit);
-
-	    if (*s == '-') {
-		++s;
-		num2 = number(&s, limit);
-		skip = 1;
-	    }
-	}
-
-	if ( *s == '/' ) {
-	    ++s;
-	    skip = number(&s, 0);
-	}
-
-	if (num2) {
-	    if (skip == 0) skip = 1;
-	    while ( constrain(num, limit) && (num <= num2) ) {
-		assign(num, &job->trigger, limit->setter);
-		num += skip;
-	    }
-	}
-	else
-	    assign(num, &job->trigger, limit->setter);
-
-	if (isspace(*s)) return firstnonblank(s);
-	else if (*s != ',') {
-	    error("malformed crontab entry <%s>", s);
-	    return 0;
-	}
-	++s;
-    } while (1);
-}
-
-
-
-static char *
-getdatespec(char *s, cron *job)
-{
-    bzero(job, sizeof *job);
-
-    s = parse(s, job, &minutes);
-    s = parse(s, job, &hours);
-    s = parse(s, job, &mday);
-    s = parse(s, job, &months);
-    s = parse(s, job, &wday);
-
-    return s;
-}
-
-
-void
-anotherjob(crontab *tab, cron *job)
-{
-    EXPAND(tab->list, tab->sze, tab->nre);
-
-    tab->list[tab->nre++] = *job;
-}
-
-
-
-void
-readcrontab(char *file)
+process(char *file)
 {
     struct stat st;
     FILE *f;
     char *s;
     struct passwd *user;
-    cron job;
-    crontab ct;
-
+    crontab tab;
 
     if (stat(file,&st) != 0)
 	return;
@@ -281,26 +111,16 @@ readcrontab(char *file)
 	return;
     }
 
-    bzero(&ct, sizeof ct);
-    ct.user = user->pw_uid;
-    time(&ct.age);
+    bzero(&tab, sizeof tab);
+    tab.user = user->pw_uid;
+    tab.mtime = st.st_mtime;
 
-    while ( s = fgetlol(f) ) {
-	s = firstnonblank(s);
+    readcrontab(&tab, f);
 
-	if (*s == 0 || *s == '#' || *s == '\n')
-	    continue;
-
-	if (isalpha(*s)) /* vixie-style environment variable assignment */
-	    continue;
-
-	if (s = getdatespec(s, &job)) {
-	    job.command = strdup(s);
-	    anotherjob(&ct, &job);
-	}
+    if (tab.nrl > 0) {
+	EXPAND(tabs,sztabs,nrtabs);
+	tabs[nrtabs++] = tab;
     }
-    EXPAND(tabs,sztabs,nrtabs);
-    tabs[nrtabs++] = ct;
 }
 
 
@@ -362,10 +182,9 @@ main(int argc, char **argv)
     DIR *d;
     struct dirent *ent;
     time_t ticks;
-    struct tm *clock;
     Evmask Now;
     int i;
-    int interval = 5;
+    int interval = 1;
 
     if ( argc > 1)
 	interval = atoi(argv[1]);
@@ -378,20 +197,8 @@ main(int argc, char **argv)
 	interval = 1;
 
     time(&ticks);
-    clock = localtime(&ticks);
-    bzero(&Now, sizeof Now);
 
-    if (interval > 1)
-	clock->tm_min -= clock->tm_min % interval;
-
-    for (i=0; i < 5; i++)
-	if (clock->tm_min + i < 60)
-	    sminute(&Now, clock->tm_min+i);
-
-    shour(&Now, clock->tm_hour);
-    smday(&Now, clock->tm_mday);
-    smonth(&Now,clock->tm_mon);
-    swday(&Now, clock->tm_wday);
+    tmtoEvmask(localtime(&ticks),interval,&Now);
 
     printf("----");printtrig(&Now); printf("Current time\n");
 
@@ -405,17 +212,19 @@ main(int argc, char **argv)
 
     if ( d = opendir(".") ) {
 	while (ent = readdir(d))
-	    readcrontab(ent->d_name);
+	    process(ent->d_name);
 	closedir(d);
     }
     {   int i, j;
 	for (i=0; i < nrtabs; i++) {
-	    if (tabs[i].nre ) {
+	    if (tabs[i].nrl ) {
 		struct passwd *pwd = getpwuid(tabs[i].user);
 
 		if (pwd) {
 		    printf("crontab for %s (id %d.%d):\n", pwd->pw_name, pwd->pw_uid, pwd->pw_gid);
-		    for (j=0; j<tabs[i].nre; j++) {
+		    for (j=0; j<tabs[i].nre; j++)
+			printf("%s\n", tabs[i].env[j]);
+		    for (j=0; j<tabs[i].nrl; j++) {
 			if ( triggered(&Now, &(tabs[i].list[j].trigger)) )
 			    printf("--->");
 			else
