@@ -237,3 +237,18 @@ tmtoEvmask(struct tm *tm, int interval, Evmask *time)
     smonth(time,tm->tm_mon);
     swday(time, tm->tm_wday);
 }
+
+
+time_t
+mtime(char *path)
+{
+    struct stat st;
+    time_t now;
+
+    if ( stat(path, &st) == 0 )
+	return st.st_mtime;
+
+    error("can't stat %s -- returning current time", path);
+    time(&now);
+    return now;
+}

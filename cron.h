@@ -42,6 +42,7 @@ typedef struct {
 typedef struct {
     uid_t user;		/* user who owns the crontab */
     time_t mtime;	/* when the crontab was changed */
+    int flags;		/* various flags */
     char **env;		/* passed-in environment entries */
     int nre;
     int sze;
@@ -54,5 +55,6 @@ typedef struct {
 void readcrontab(crontab *, FILE*);
 void zerocrontab(crontab *);
 void tmtoEvmask(struct tm *,int,Evmask*);
+time_t mtime(char *);
 
 #endif

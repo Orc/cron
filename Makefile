@@ -1,4 +1,4 @@
-CC=cc -baout
+CC=cc -baout -g
 pgm=cron.t
 
 objs=cron.o readcrontab.o
