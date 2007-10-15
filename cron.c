@@ -18,6 +18,8 @@ crontab *tabs = 0;
 int    nrtabs = 0;
 int    sztabs = 0;
 
+static int ct_add, ct_update, ct_inact;
+
 
 char*
 firstnonblank(char *s)
@@ -76,14 +78,23 @@ fgetlol(FILE *f)
 }
 
 
+int
+cmptabs(const void *c1, const void *c2)
+{
+    crontab *a = (crontab*)c1,
+	    *b = (crontab*)c2;
+
+    return a->user - b->user;
+}
+
+
 void
 process(char *file)
 {
     struct stat st;
     FILE *f;
-    char *s;
     struct passwd *user;
-    crontab tab;
+    crontab tab, *ent;
 
     if (stat(file,&st) != 0)
 	return;
@@ -106,23 +117,36 @@ process(char *file)
 	return;
     }
 
-    if ( (f = fopen(file,"r")) == 0 ) {
-	error("can't open crontab for %s: %s", file, strerror(errno));
-	return;
-    }
-
-    bzero(&tab, sizeof tab);
     tab.user = user->pw_uid;
-    tab.mtime = st.st_mtime;
-    tab.flags = 1;
 
-    readcrontab(&tab, f);
+    ent = bsearch(&tab, tabs, nrtabs, sizeof tabs[0], cmptabs);
 
-    if (tab.nrl > 0) {
-	EXPAND(tabs,sztabs,nrtabs);
-	tabs[nrtabs++] = tab;
+    if (ent) {
+	if (ent->mtime == st.st_mtime) {
+	    if (ent->nrl) ent->flags |= ACTIVE;
+	    return;
+	}
+	zerocrontab(ent);
+	ct_update++;
     }
+    else {
+	EXPAND(tabs,sztabs,nrtabs);
+	ent = &tabs[nrtabs++];
+	bzero(ent, sizeof tabs[0]);
+	ent->user = user->pw_uid;
+	ct_add++;
+    }
+
+    if ( f = fopen(file,"r") ) {
+	readcrontab(ent, f);
+	if (ent->nrl) ent->flags |= ACTIVE;
+	ent->mtime = st.st_mtime;
+	fclose(f);
+    }
+    else
+	error("can't open crontab for %s: %s", file, strerror(errno));
 }
+
 
 void
 zerocrontab(crontab *tab)
@@ -133,11 +157,11 @@ zerocrontab(crontab *tab)
 
     for (i=0; i < tab->nre; ++i)
 	free(tab->env[i]);
-    if (tab->env) free(tab->env);
+    tab->nre = 0;
 
     for (i=0; i < tab->nrl; ++i)
 	free(tab->list[i].command);
-    if (tab->list) free(tab->list);
+    tab->nrl = 0;
 }
 
 
@@ -194,6 +218,66 @@ triggered(Evmask *t, Evmask *m)
 }
 
 
+#if DEBUG
+void
+printcrontab(crontab *tab, int nrtab)
+{
+    int i, j;
+
+    for (i=0; i < nrtab; i++)
+	if (tabs[i].nrl ) {
+	    struct passwd *pwd = getpwuid(tabs[i].user);
+
+	    if (pwd) {
+		printf("crontab for %s (id %d.%d):\n", pwd->pw_name, pwd->pw_uid, pwd->pw_gid);
+#if 0
+		for (j=0; j<tabs[i].nre; j++)
+		    printf("%s\n", tabs[i].env[j]);
+#endif
+		for (j=0; j<tabs[i].nrl; j++) {
+		    printf("    ");
+		    printtrig( &tabs[i].list[j].trigger);
+		    printf("%s\n", tabs[i].list[j].command);
+		}
+	    }
+	}
+}
+#else
+#define printcrontab(t,s)	1
+#endif
+
+
+void
+cronjob(crontab *tab, int job)
+{
+    printtrig( &(tab->list[job].trigger) );
+    printf("%s\n", tab->list[job].command);
+}
+
+
+void
+scanctdir()
+{
+    DIR *d;
+    struct dirent *ent;
+    int i;
+
+    for (i=0; i < nrtabs; i++)
+	tabs[i].flags &= ~ACTIVE;
+
+    ct_add = ct_update = ct_inact = 0;
+
+    if ( d = opendir(".") ) {
+	while (ent = readdir(d))
+	    process(ent->d_name);
+	closedir(d);
+	qsort(tabs, nrtabs, sizeof tabs[0], cmptabs);
+    }
+    for (i=0; i < nrtabs; i++)
+	if ( !(tabs[i].flags&ACTIVE) ) ct_inact++;
+}
+
+
 main(int argc, char **argv)
 {
     time_t ticks;
@@ -230,6 +314,7 @@ main(int argc, char **argv)
 	    scanctdir();
 	    printf("scanctdir:  time WAS %s", ctime(&ct_dirtime));
 	    printf("                  IS %s", ctime(&newtime));
+	    printf("total %d, added %d, updated %d, active %d\n", nrtabs, ct_add, ct_update, nrtabs - ct_inact);
 	    ct_dirtime = newtime;
 	    printcrontab(tabs,nrtabs);
 	}
@@ -241,59 +326,8 @@ main(int argc, char **argv)
 
 	for (i=0; i < nrtabs; i++)
 	    for (j=0; j < tabs[i].nrl; j++)
-		if ( triggered(&Now, &(tabs[i].list[j].trigger)) )
+		if ( (tabs[i].flags & ACTIVE) && triggered(&Now, &(tabs[i].list[j].trigger)) )
 		    cronjob(&tabs[i], j);
 	sleep(60*interval);
-    }
-}
-
-
-void
-printcrontab(crontab *tab, int nrtab)
-{
-    int i, j;
-
-    for (i=0; i < nrtab; i++)
-	if (tabs[i].nrl ) {
-	    struct passwd *pwd = getpwuid(tabs[i].user);
-
-	    if (pwd) {
-		printf("crontab for %s (id %d.%d):\n", pwd->pw_name, pwd->pw_uid, pwd->pw_gid);
-		for (j=0; j<tabs[i].nre; j++)
-		    printf("%s\n", tabs[i].env[j]);
-		for (j=0; j<tabs[i].nrl; j++) {
-		    printf("    ");
-		    printtrig( &tabs[i].list[j].trigger);
-		    printf("%s\n", tabs[i].list[j].command);
-		}
-	    }
-	}
-}
-
-
-void
-cronjob(crontab *tab, int job)
-{
-    printtrig( &(tab->list[job].trigger) );
-    printf("%s\n", tab->list[job].command);
-}
-
-
-void
-scanctdir()
-{
-    DIR *d;
-    struct dirent *ent;
-    int i;
-
-    for (i=0; i < nrtabs; i++)
-	zerocrontab(&tabs[i]);
-
-    nrtabs = 0;
-
-    if ( d = opendir(".") ) {
-	while (ent = readdir(d))
-	    process(ent->d_name);
-	closedir(d);
     }
 }

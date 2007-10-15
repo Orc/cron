@@ -43,6 +43,7 @@ typedef struct {
     uid_t user;		/* user who owns the crontab */
     time_t mtime;	/* when the crontab was changed */
     int flags;		/* various flags */
+#define ACTIVE	0x01
     char **env;		/* passed-in environment entries */
     int nre;
     int sze;
