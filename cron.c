@@ -311,6 +311,8 @@ main(int argc, char **argv)
     if (!securepath(CRONDIR))
 	exit(1);
 
+    openlog("cron", 0, LOG_CRON);
+
     ct_dirtime = 0;
 
     signal(SIGCHLD, eat);

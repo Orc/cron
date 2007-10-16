@@ -6,6 +6,10 @@
 #include <sys/types.h>
 #include <time.h>
 
+#ifndef CRONDIR
+#define CRONDIR "/var/spool/cron/crontabs"
+#endif
+
 /*
  * eventmask is
  * 60 bits for minute, 31 bits for mday, 24 bits for hour, 12 bits for month, and
@@ -57,5 +61,6 @@ void readcrontab(crontab *, FILE*);
 void zerocrontab(crontab *);
 void tmtoEvmask(struct tm *,int,Evmask*);
 time_t mtime(char *);
+void runjob(crontab *, int);
 
 #endif
