@@ -1,3 +1,6 @@
+/*
+ * run a job
+ */
 #include <stdio.h>
 #include <pwd.h>
 #include <ctype.h>
@@ -15,9 +18,9 @@
 
 #include "cron.h"
 
-extern void error(char*,...);
-
-
+/* pull a MAILTO value out of the job environment, if any
+ * was defined
+ */
 static char *
 mailto(crontab *tab)
 {
@@ -30,8 +33,7 @@ mailto(crontab *tab)
 }
 
 
-/*
- * run a job, mail output (if any) to the user.
+/* run a job, mail output (if any) to the user.
  */
 void
 runjob(crontab *tab, int job)
@@ -41,31 +43,37 @@ runjob(crontab *tab, int job)
     struct passwd *pwd;
 
     if ( (pwd = getpwuid(tab->user)) == 0 ) {
+	/* if we can't find a password entry for this crontab, 
+	 * touch mtime so that it will be rescanned the next
+	 * time cron checks the CRONDIR for new crontabs.
+	 */
 	error("no password entry for user %d\n", tab->user);
+	time(&tab->mtime);
 	return;
     }
 
-    if ( (pid = fork()) == -1 ) {
-	error("fork(): %s", strerror(errno));
-	return;
-    }
+    if ( (pid = fork()) == -1 ) { error("fork(): %s", strerror(errno)); return; }
 
-    if (pid != 0)
-	return;
+    if (pid > 0) return;
 
-    if ( chdir("/tmp") == -1 ) { error("chdir(\"/tmp\"): %s", strerror(errno)); exit(1); }
 
-    if ( setregid(pwd->pw_gid, pwd->pw_gid) == -1) { error("setregid(%d,%d): %s", pwd->pw_gid, pwd->pw_gid, strerror(errno)); exit(1); }
-    if ( setreuid(pwd->pw_uid, pwd->pw_uid) == -1) { error("setreuid(%d,%d): %s", pwd->pw_uid, pwd->pw_uid, strerror(errno)); exit(1); }
+    /* from this point on, we're the child process and should fatal() if anything
+     * goes wrong
+     */
 
-    if (pwd->pw_dir)
-	chdir(pwd->pw_dir);
+    if ( setregid(pwd->pw_gid, pwd->pw_gid) == -1)
+	fatal("setregid(%d,%d): %s", pwd->pw_gid, pwd->pw_gid, strerror(errno));
+    if ( setreuid(pwd->pw_uid, pwd->pw_uid) == -1)
+	fatal("setreuid(%d,%d): %s", pwd->pw_uid, pwd->pw_uid, strerror(errno));
 
-    if ( pipe(io) == -1 ) { error("pipe: %s", strerror(errno)); exit(1); }
+    if ( chdir(pwd->pw_dir ? pwd->pw_dir : "/tmp") == -1 )
+	fatal("chdir(\"%s\"): %s", pwd->pw_dir ? pwd->pw_dir : "/tmp", strerror(errno));
+
+    if ( pipe(io) == -1 ) fatal("pipe: %s", strerror(errno));
 
     pid = fork();
 
-    if (pid == -1) { error("fork(): %s", strerror(errno)); exit(1); }
+    if (pid == -1) fatal("fork(): %s", strerror(errno));
 
     if (pid == 0) {
 	FILE *f;
@@ -90,7 +98,7 @@ runjob(crontab *tab, int job)
 	    }
 	    pclose(f);
 	}
-	else { error("popen(): %s", strerror(errno)); exit(1); }
+	else fatal("popen(): %s", strerror(errno));
     }
     else {
 	fd_set readers, errors;
@@ -114,8 +122,7 @@ runjob(crontab *tab, int job)
 	    snprintf(subject, sizeof subject, "Cron <%s> %s", to, tab->list[job].command);
 	    execl("/bin/mail", "mail", "-s", subject, to, 0L);
 
-	    error("can't execl(\"/bin/mail\",...): %s", strerror(errno));
-	    exit(1);
+	    fatal("can't execl(\"/bin/mail\",...): %s", strerror(errno));
 	}
     }
     exit(0);

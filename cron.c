@@ -1,3 +1,6 @@
+/*
+ * cron: run jobs at scheduled times.
+ */
 #include <stdio.h>
 #include <pwd.h>
 #include <ctype.h>
@@ -7,16 +10,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <syslog.h>
-#include <stdarg.h>
 #include <dirent.h>
 #include <errno.h>
 #include <signal.h>
+#include <syslog.h>
 
 #include "cron.h"
 
-int    interactive = 1;
-
+/* keep all the crontabs in a sorted-by-uid array, 
+ */
 crontab *tabs = 0;
 int    nrtabs = 0;
 int    sztabs = 0;
@@ -24,6 +26,9 @@ int    sztabs = 0;
 static int ct_add, ct_update, ct_inact;
 
 
+/* SIGCHLD handler -- it simply eats up child statuses until there are no
+ * more
+ */
 static void
 eat()
 {
@@ -34,66 +39,8 @@ eat()
 }
 
 
-char*
-firstnonblank(char *s)
-{
-    while (*s && isspace(*s)) ++s;
-
-    return s;
-}
-
-
-void
-error(char *fmt, ...)
-{
-    va_list ptr;
-
-    va_start(ptr,fmt);
-    if (interactive) {
-	vfprintf(stderr, fmt, ptr);
-	fputc('\n',stderr);
-	exit(1);
-    }
-    else
-	vsyslog(LOG_ERR, fmt, ptr);
-    va_end(ptr);
-}
-
-
-char*
-fgetlol(FILE *f)
-{
-    static char *line = 0;
-    static int szl = 0;
-    int nrl = 0;
-    register c;
-
-    while ( (c = fgetc(f)) != EOF ) {
-	EXPAND(line,szl,nrl);
-
-	if ( c == '\\')  {
-	    if ( (c = fgetc(f)) == EOF )
-		break;
-	    line[nrl++] = c;
-	    continue;
-	}
-	else if ( c == '%' )
-	    c = '\n';
-	else if ( c == '\n' ) {
-	    line[nrl] = 0;
-	    return line;
-	}
-
-	line[nrl++] = c;
-    }
-    if (nrl) {
-	line[nrl] = 0;
-	return line;
-    }
-    return 0;
-}
-
-
+/* sort crontab entries by userid
+ */
 int
 cmptabs(const void *c1, const void *c2)
 {
@@ -104,6 +51,12 @@ cmptabs(const void *c1, const void *c2)
 }
 
 
+/* validate and read in a crontab.  Checks that
+ * the crontab is named for an existing user, that
+ * it's owned by root, that it's not readable or
+ * writable by anyone except root, and that it's
+ * a regular file.
+ */
 void
 process(char *file)
 {
@@ -164,6 +117,9 @@ process(char *file)
 }
 
 
+/* erase the contents of a crontab, leaving the arrays allocated for
+ * later use.
+ */
 void
 zerocrontab(crontab *tab)
 {
@@ -184,18 +140,17 @@ zerocrontab(crontab *tab)
 }
 
 
-int
+/* verify that the CRONDIR is a legitimate path
+ */
+static void
 securepath(char *path)
 {
     char *line = alloca(strlen(path)+1);
     char *p, *part;
-    struct stat sb;
+    struct stat sb, sb1;
 
-
-    if (line == 0) {
-	error("%s: %m", path, strerror(errno));
-	return 0;
-    }
+    if (line == 0)
+	fatal("%s: %m", path, strerror(errno));
     strcpy(line, path);
 
     /* check each part of the path */
@@ -204,16 +159,21 @@ securepath(char *path)
 
 	part = line[0] ? line : "/";
 
-	if ( stat(part, &sb) != 0 ) { error("%s: can't stat", part); return 0; }
-	if ( sb.st_uid != 0 ) { error("%s: not user 0", part); return 0; }
-	if ( sb.st_gid != 0 ) { error("%s: not group 0", part); return 0; }
-	if ( !S_ISDIR(sb.st_mode) ) { error("%s: not a directory", part); return 0; }
-	if ( sb.st_mode & (S_IWGRP|S_IWOTH) ) { error("%s: group or world writable", part); return 0; }
+	if ( stat(part, &sb) != 0 ) fatal("%s: can't stat", part);
+	if ( sb.st_uid != 0 ) fatal("%s: not user 0", part);
+	if ( sb.st_gid != 0 ) fatal("%s: not group 0", part);
+	if ( !S_ISDIR(sb.st_mode) ) fatal("%s: not a directory", part);
+	if ( sb.st_mode & (S_IWGRP|S_IWOTH) ) fatal("%s: group or world writable", part);
     }
-    return 1;
+    if ( stat(path, &sb) != 0 ) fatal("%s: can't stat", path);
+    if ( stat(".", &sb1) != 0 ) fatal(".: can't stat");
+    if ( (sb.st_dev != sb1.st_dev) || (sb.st_ino != sb1.st_ino) ) fatal("cwd not %s", CRONDIR);
 }
 
 
+/* print the (hex) value of an event mask
+ */
+#if DEBUG
 void
 printtrig(Evmask *m)
 {
@@ -223,8 +183,13 @@ printtrig(Evmask *m)
     printf("%04x ", m->month);
     printf("%04x ", m->wday);
 }
+#else
+#define printtrig(x)	1
+#endif
 
 
+/* does the current time fall inside a job event mask?
+ */
 int
 triggered(Evmask *t, Evmask *m)
 {
@@ -237,6 +202,8 @@ triggered(Evmask *t, Evmask *m)
 }
 
 
+/* print the contents of a crontab
+ */
 #if DEBUG
 void
 printcrontab(crontab *tab, int nrtab)
@@ -249,16 +216,12 @@ printcrontab(crontab *tab, int nrtab)
 
 	    if (pwd) {
 		printf("crontab for %s (id %d.%d):\n", pwd->pw_name, pwd->pw_uid, pwd->pw_gid);
-#if 0
-		for (j=0; j<tabs[i].nre; j++)
-		    printf("%s\n", tabs[i].env[j]);
-#endif
 		for (j=0; j<tabs[i].nrl; j++) {
 		    printf("    ");
 		    printtrig( &tabs[i].list[j].trigger);
 		    printf("%s", tabs[i].list[j].command);
 		    if (tabs[i].list[j].input)
-			printf("<< \EOF\n%s\nEOF\n", tabs[i].list[j].input);
+			printf("<< \\EOF\n%s\nEOF\n", tabs[i].list[j].input);
 		    else
 			putchar('\n');
 		}
@@ -270,6 +233,8 @@ printcrontab(crontab *tab, int nrtab)
 #endif
 
 
+/* search CRONDIR looking for new and changed crontabs
+ */
 void
 scanctdir()
 {
@@ -293,6 +258,27 @@ scanctdir()
 }
 
 
+/* punt ourselves into the background
+ */
+void
+daemonize()
+{
+#if !defined(DEBUG)
+    pid_t pid = fork();
+
+    if (pid == -1) fatal("backgrounding: %s", strerror(errno));
+    if (pid == 0) exit(0);
+    setsid();
+    pid = fork();
+    if (pid == -1) fatal("double-fork: %s", strerror(errno));
+    if (pid == 0) exit(0);
+    interactive = 0;
+#endif
+}
+
+
+/* cron.
+ */
 main(int argc, char **argv)
 {
     time_t ticks;
@@ -306,24 +292,21 @@ main(int argc, char **argv)
     if ( argc > 1)
 	interval = atoi(argv[1]);
 
-    if (interval > 60) {
-	error("there are only 60 minutes to the hour.");
-	exit(1);
-    }
+    if (interval > 60) 
+	fatal("there are only 60 minutes to the hour.");
     else if (interval < 1)
 	interval = 1;
 
+    if (chdir(CRONDIR) != 0)
+	fatal("can't chdir into crontabs: %s", strerror(errno) );
 
-    if (chdir(CRONDIR) != 0) {
-	error("can't chdir into crontabs: %s", strerror(errno) );
-	exit(1);
-    }
-    if (!securepath(CRONDIR))
-	exit(1);
+    securepath(CRONDIR);
+
+    ct_dirtime = 0;
 
     openlog("cron", 0, LOG_CRON);
 
-    ct_dirtime = 0;
+    daemonize();
 
     signal(SIGCHLD, eat);
 

@@ -18,16 +18,6 @@
 /* assume sizeof(long long) >= 8, sizeof(int) >= 4, sizeof(short) >= 2 */
 #define CBIT(t)		(1 << (t))
 
-#define EXPAND(t,s,n)	do { \
-			    int _n = (n); \
-			    int _s = (s); \
-			    if (_n >= _s) { \
-				_s = _n ? (_n * 10) : 200; \
-				t = t ? realloc(t, _s * (sizeof t[0]) ) \
-				      :    malloc( _s * (sizeof t[0]) ); \
-			    } \
-			} while(0)
-
 typedef struct {
     unsigned long minutes[2];	/* 60 bits worth */
     unsigned int hours;		/* 24 bits worth */
@@ -63,5 +53,19 @@ void zerocrontab(crontab *);
 void tmtoEvmask(struct tm *,int,Evmask*);
 time_t mtime(char *);
 void runjob(crontab *, int);
+
+#define EXPAND(t,s,n)	do { \
+			    int _n = (n); \
+			    int _s = (s); \
+			    if (_n >= _s) { \
+				_s = _n ? (_n * 10) : 200; \
+				t = xrealloc(t, _s, sizeof t[0]); \
+			    } \
+			} while(0)
+
+void *xrealloc(void*,int,int);
+char *fgetlol(FILE*);
+void error(char*,...);
+void fatal(char*,...);
 
 #endif

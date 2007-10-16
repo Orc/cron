@@ -1,3 +1,6 @@
+/*
+ * compile crontabs
+ */
 #include <stdio.h>
 #include <pwd.h>
 #include <ctype.h>
@@ -9,13 +12,18 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <dirent.h>
+#include <errno.h>
 
 #include "cron.h"
 
-extern int interactive;
 
 typedef void (*ef)(Evmask*,int);
 
+/* a constraint defines part of a time spec.
+ * min & max are the smallest and largest possible values,
+ * units is a string describing what the constraint is,
+ * setter is a function that sets the time spec.
+ */
 typedef struct {
     int min;
     int max;
@@ -64,10 +72,19 @@ static constraint months =  { 1, 12, "months",  smonth };
 static constraint wday =    { 0,  7, "day of the week", swday };
 
 
-char* firstnonblank(char*);
-void  error(char*,...);
-char* fgetlol(FILE *f);
+/* eat leading blanks on a line
+ */
+char*
+firstnonblank(char *s)
+{
+    while (*s && isspace(*s)) ++s;
 
+    return s;
+}
+
+
+/* check a number against a constraint.
+ */
 static int
 constrain(int num, constraint *limit)
 {
@@ -75,6 +92,9 @@ constrain(int num, constraint *limit)
 }
 
 
+/* pick a number off the front of a string, validate it,
+ * and repoint the string to after the number.
+ */
 static int
 number(char **s, constraint *limit)
 {
@@ -98,6 +118,8 @@ number(char **s, constraint *limit)
 }
 
 
+/* assign a value to an Evmask
+ */
 static void
 assign(int time, Evmask *mask, ef setter)
 {
@@ -105,6 +127,9 @@ assign(int time, Evmask *mask, ef setter)
 }
 
 
+/* pick a time field off a line, returning a pointer to
+ * the rest of the line
+ */
 static char *
 parse(char *s, cron *job, constraint *limit)
 {
@@ -157,7 +182,10 @@ parse(char *s, cron *job, constraint *limit)
 }
 
 
-
+/* read the entire time spec off the start of a line,
+ * returning either null (an error) or a pointer to
+ * the rest of the line.
+ */
 static char *
 getdatespec(char *s, cron *job)
 {
@@ -173,6 +201,8 @@ getdatespec(char *s, cron *job)
 }
 
 
+/* add a job to a crontab.
+ */
 static void
 anotherjob(crontab *tab, cron *job)
 {
@@ -182,14 +212,34 @@ anotherjob(crontab *tab, cron *job)
 }
 
 
+/* copy a string or die.
+ */
+static char*
+xstrdup(char *src, char *what)
+{
+    char *ret;
+    
+    
+    if ( ret = strdup(src) )
+	return ret;
+
+    fatal("%s: %s", what, strerror(errno));
+    return 0;
+}
+
+
+/* add an environment variable to the job environment
+ */
 static void
 jobenv(crontab *tab, char *env)
 {
     EXPAND(tab->env, tab->sze, tab->nre);
-    tab->env[tab->nre++] = strdup(env);
+    tab->env[tab->nre++] = xstrdup(env, "jobenv");
 }
 
 
+/* compile a crontab
+ */
 void
 readcrontab(crontab *tab, FILE *f)
 {
@@ -216,13 +266,16 @@ readcrontab(crontab *tab, FILE *f)
 	    char *p = strchr(s, '\n');
 
 	    if (p) *p++ = 0;
-	    job.command = strdup(s);
-	    job.input =  p ? strdup(p) : 0;
+	    job.command = xstrdup(s, "readcrontab::command");
+	    job.input =  p ? xstrdup(p, "readcrontab::input") : 0;
 	    anotherjob(tab, &job);
 	}
     }
 }
 
+
+/* convert a time into an event mask
+ */
 void
 tmtoEvmask(struct tm *tm, int interval, Evmask *time)
 {
@@ -240,19 +293,4 @@ tmtoEvmask(struct tm *tm, int interval, Evmask *time)
     smday(time, tm->tm_mday);
     smonth(time,tm->tm_mon);
     swday(time, tm->tm_wday);
-}
-
-
-time_t
-mtime(char *path)
-{
-    struct stat st;
-    time_t now;
-
-    if ( stat(path, &st) == 0 )
-	return st.st_mtime;
-
-    error("can't stat %s -- returning current time", path);
-    time(&now);
-    return now;
 }
