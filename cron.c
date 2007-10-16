@@ -2,6 +2,7 @@
 #include <pwd.h>
 #include <ctype.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,8 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <dirent.h>
+#include <errno.h>
+#include <signal.h>
 
 #include "cron.h"
 
@@ -19,6 +22,16 @@ int    nrtabs = 0;
 int    sztabs = 0;
 
 static int ct_add, ct_update, ct_inact;
+
+
+static void
+eat()
+{
+    int status;
+
+    while (waitpid(0, &status, WNOHANG) != -1)
+	;
+}
 
 
 char*
@@ -248,14 +261,6 @@ printcrontab(crontab *tab, int nrtab)
 
 
 void
-cronjob(crontab *tab, int job)
-{
-    printtrig( &(tab->list[job].trigger) );
-    printf("%s\n", tab->list[job].command);
-}
-
-
-void
 scanctdir()
 {
     DIR *d;
@@ -284,6 +289,7 @@ main(int argc, char **argv)
     Evmask Now;
     int i, j;
     int interval = 1;
+    int left;
     struct stat st;
     time_t ct_dirtime;
 
@@ -298,23 +304,27 @@ main(int argc, char **argv)
 	interval = 1;
 
 
-    if (chdir("/var/spool/cron/crontabs") != 0) {
+    if (chdir(CRONDIR) != 0) {
 	error("can't chdir into crontabs: %s", strerror(errno) );
 	exit(1);
     }
-    if (!securepath("/var/spool/cron/crontabs"))
+    if (!securepath(CRONDIR))
 	exit(1);
 
     ct_dirtime = 0;
+
+    signal(SIGCHLD, eat);
 
     while (1) {
 	time_t newtime = mtime(".");
 
 	if (newtime != ct_dirtime) {
 	    scanctdir();
+#if DEBUG
 	    printf("scanctdir:  time WAS %s", ctime(&ct_dirtime));
 	    printf("                  IS %s", ctime(&newtime));
 	    printf("total %d, added %d, updated %d, active %d\n", nrtabs, ct_add, ct_update, nrtabs - ct_inact);
+#endif
 	    ct_dirtime = newtime;
 	    printcrontab(tabs,nrtabs);
 	}
@@ -322,12 +332,16 @@ main(int argc, char **argv)
 	time(&ticks);
 	tmtoEvmask(localtime(&ticks),interval,&Now);
 
+#if DEBUG
 	printf("run Evmask:");printtrig(&Now); putchar('\n');
+#endif
 
 	for (i=0; i < nrtabs; i++)
 	    for (j=0; j < tabs[i].nrl; j++)
 		if ( (tabs[i].flags & ACTIVE) && triggered(&Now, &(tabs[i].list[j].trigger)) )
-		    cronjob(&tabs[i], j);
-	sleep(60*interval);
+		    runjob(&tabs[i], j);
+
+	for (left = 60 * interval; left > 0; left = sleep(left))
+	    ;
     }
 }

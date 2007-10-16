@@ -1,7 +1,7 @@
 CC=cc -baout -g -DDEBUG
 pgm=cron.t
 
-objs=cron.o readcrontab.o
+objs=cron.o readcrontab.o runjob.o
 
 all: $(pgm)
 
