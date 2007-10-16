@@ -1,0 +1,46 @@
+.Dd October 15, 2007
+.Os Mastodon
+.Dt CRON 8
+.Sh NAME
+.Nm cron
+.Nd run commands at scheduled times
+.Sh SYNOPSIS
+.Nm /sbin/cron
+.Op Ar interval
+.Sh DESCRIPTION
+.Nm Cron
+executes commands at specified dates and times according to the
+instructions in
+.Xr crontab 5
+files in
+.Pa /var/spool/cron/crontabs .
+When
+.Nm cron
+is running, it wakes up every minute, checks to see if any of the
+.Ar crontabs 
+in
+.Pa /var/spool/cron/crontabs
+contain jobs to be run, then runs them and mails the output (if any)
+to the owner of the crontab (or to the user named in the 
+.Em MAILTO
+environment variable defined in the crontab.)
+.Pp
+.Nm Cron
+normally examines
+.Pa /var/spool/cron
+every minute, but this interval can be increased by the command-line
+argument
+.Ar interval ,
+which is the number of minutes between
+.Nm cron
+runs.
+.Sh FILES
+.Bl -tag -width Pa /var/spool/cron/crontabs
+.It Pa /var/spool/cron/crontabs
+Where crontabs are found.
+.El
+.Sh SEE ALSO
+.Xr crontab 5 ,
+.Xr crontab 1 .
+.Sh AUTHOR
+David Parsons (orc@pell.chi.il.us)
