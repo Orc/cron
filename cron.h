@@ -40,6 +40,7 @@ typedef struct {
 typedef struct {
     Evmask trigger;
     char *command;
+    char *input;
 } cron;
 
 

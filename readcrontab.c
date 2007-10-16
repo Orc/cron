@@ -213,7 +213,11 @@ readcrontab(crontab *tab, FILE *f)
 		jobenv(tab,s);
 	}
 	else if (s = getdatespec(s, &job)) {
+	    char *p = strchr(s, '\n');
+
+	    if (p) *p++ = 0;
 	    job.command = strdup(s);
+	    job.input =  p ? strdup(p) : 0;
 	    anotherjob(tab, &job);
 	}
     }

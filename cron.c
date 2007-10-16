@@ -71,16 +71,19 @@ fgetlol(FILE *f)
     while ( (c = fgetc(f)) != EOF ) {
 	EXPAND(line,szl,nrl);
 
-	if ( c == '\n' ) {
-	    if (nrl && (line[nrl-1] == '\\')) {
-		line[nrl-1] = c;
-		continue;
-	    }
-	    else {
-		line[nrl] = 0;
-		return line;
-	    }
+	if ( c == '\\')  {
+	    if ( (c = fgetc(f)) == EOF )
+		break;
+	    line[nrl++] = c;
+	    continue;
 	}
+	else if ( c == '%' )
+	    c = '\n';
+	else if ( c == '\n' ) {
+	    line[nrl] = 0;
+	    return line;
+	}
+
 	line[nrl++] = c;
     }
     if (nrl) {
@@ -172,8 +175,11 @@ zerocrontab(crontab *tab)
 	free(tab->env[i]);
     tab->nre = 0;
 
-    for (i=0; i < tab->nrl; ++i)
+    for (i=0; i < tab->nrl; ++i) {
 	free(tab->list[i].command);
+	if (tab->list[i].input)
+	    free(tab->list[i].input);
+    }
     tab->nrl = 0;
 }
 
@@ -250,7 +256,11 @@ printcrontab(crontab *tab, int nrtab)
 		for (j=0; j<tabs[i].nrl; j++) {
 		    printf("    ");
 		    printtrig( &tabs[i].list[j].trigger);
-		    printf("%s\n", tabs[i].list[j].command);
+		    printf("%s", tabs[i].list[j].command);
+		    if (tabs[i].list[j].input)
+			printf("<< \EOF\n%s\nEOF\n", tabs[i].list[j].input);
+		    else
+			putchar('\n');
 		}
 	    }
 	}

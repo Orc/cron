@@ -1,12 +1,12 @@
 CC=cc -baout -g -DDEBUG
-pgm=cron.t
+progs=cron crontab
 
 objs=cron.o readcrontab.o runjob.o
 
-all: $(pgm)
+all: $(progs)
 
 
-cron.t: $(objs)
+cron: $(objs)
 	$(CC) -o cron.t $(objs)
 
 clean:

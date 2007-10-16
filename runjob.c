@@ -68,6 +68,7 @@ runjob(crontab *tab, int job)
     if (pid == -1) { error("fork(): %s", strerror(errno)); exit(1); }
 
     if (pid == 0) {
+	FILE *f;
 	int i;
 
 	syslog(LOG_INFO, "(%s) CMD (%s)", pwd->pw_name, tab->list[job].command);
@@ -82,7 +83,14 @@ runjob(crontab *tab, int job)
 	for (i=0; i < tab->nre; i++)
 	    putenv(tab->env[i]);
 
-	system(tab->list[job].command);
+	if ( f = popen(tab->list[job].command, "w") ) {
+	    if (tab->list[job].input) {
+		fputs(tab->list[job].input, f);
+		fputc('\n', f);
+	    }
+	    pclose(f);
+	}
+	else { error("popen(): %s", strerror(errno)); exit(1); }
     }
     else {
 	fd_set readers, errors;
