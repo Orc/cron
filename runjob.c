@@ -17,6 +17,22 @@
 
 extern void error(char*,...);
 
+
+static char *
+mailto(crontab *tab)
+{
+    int i;
+
+    for (i=0; i < tab->nre; ++i)
+	if ( strncmp(tab->env[i], "MAILTO=", 7) == 0 )
+	    return tab->env[i] + 7;
+    return 0;
+}
+
+
+/*
+ * run a job, mail output (if any) to the user.
+ */
 void
 runjob(crontab *tab, int job)
 {
@@ -24,9 +40,7 @@ runjob(crontab *tab, int job)
     int io[2];
     struct passwd *pwd;
 
-    pwd = getpwuid(tab->user);
-
-    if (pwd == 0) {
+    if ( (pwd = getpwuid(tab->user)) == 0 ) {
 	error("no password entry for user %d\n", tab->user);
 	return;
     }
@@ -56,8 +70,8 @@ runjob(crontab *tab, int job)
     if (pid == 0) {
 	int i;
 
-printtrig( &(tab->list[job].trigger) );
-printf("%s\n", tab->list[job].command);
+	syslog(LOG_INFO, "(%s) CMD (%s)", pwd->pw_name, tab->list[job].command);
+
 	fflush(stdout);
 	fflush(stderr);
 
@@ -69,32 +83,32 @@ printf("%s\n", tab->list[job].command);
 	    putenv(tab->env[i]);
 
 	system(tab->list[job].command);
-	exit(0);
     }
     else {
 	fd_set readers, errors;
-	int status;
+	int rc,status;
 
+	fflush(stdin);
 	dup2(io[0], 0);
 	close(io[1]);
 
-	FD_ZERO(&readers); FD_SET(0, &readers);
-	FD_ZERO(&errors);  FD_SET(0, &errors);
-
-	while (select(1, &readers, 0, &errors, 0) == 0)
-	    ;
+	do {
+	    FD_ZERO(&readers); FD_SET(0, &readers);
+	    FD_ZERO(&errors);  FD_SET(0, &errors);
+	} while (select(1, &readers, 0, &errors, 0) == 0);
 
 	if (FD_ISSET(0, &readers)) {
 	    char subject[120];
+	    char *to = mailto(tab);
 
-	    snprintf(subject, sizeof subject, "Cron <%s> %s", pwd->pw_name, tab->list[job].command);
-	    execlp("/bin/mail", "mail", "-s", subject, pwd->pw_name, 0L);
-	    error("can't execlp() /bin/mail: %s", strerror(errno));
+	    if (to == 0) to = pwd->pw_name;
+
+	    snprintf(subject, sizeof subject, "Cron <%s> %s", to, tab->list[job].command);
+	    execl("/bin/mail", "mail", "-s", subject, to, 0L);
+
+	    error("can't execl(\"/bin/mail\",...): %s", strerror(errno));
 	    exit(1);
 	}
-	/* job finished without errors, so pick up the errorcodes and continue */
-	exit(0);
     }
-
     exit(0);
 }
