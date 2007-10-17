@@ -82,6 +82,7 @@ newcrontab(char *file, char *name, int zap)
     register c;
     FILE *in, *out;
     struct utimbuf touch;
+    int save_euid = geteuid();
 
     umask(077);
 
@@ -104,9 +105,14 @@ newcrontab(char *file, char *name, int zap)
 	    fatal("no input; use -r to delete a crontab");
 	tempfile = 1;
     }
-    else if ( (in = fopen(file, "r")) == 0 ) {
-	error("can't open %s: %s", file, strerror(errno));
-	return 0;
+    else {
+	seteuid(getuid());
+	in = fopen(file, "r");
+	seteuid(save_euid);
+	if ( in == 0 ) {
+	    error("can't open %s: %s", file, strerror(errno));
+	    return 0;
+	}
     }
 
     zerocrontab(&tab);
@@ -270,6 +276,6 @@ main(int argc, char **argv)
     else if (edit)
 	visual(pwd);
     else if ( !newcrontab( argc ? argv[0] : "-", pwd->pw_name, 0) )
-	fatal("errors in crontab file, cannot install!");
+	exit(1);
     exit(0);
 }
