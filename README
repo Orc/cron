@@ -1,0 +1,18 @@
+CRON is a small cron daemon (& crontab program) for UN*X-style systems
+that is almost, but not quite, posixish.
+
+CRON is free software;  it is released under a BSD-style license
+that allows you to do as you wish with it as long as you don't attempt
+to claim it as your own work.
+
+Most of the programs included in the CRON distribution have
+manual pages describing how they work.
+
+
+To install cron, do
+
+	./configure.sh		(./configure.sh --help explains options)
+
+	make
+
+	make install		(as root)
