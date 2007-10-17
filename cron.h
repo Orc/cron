@@ -6,24 +6,25 @@
 #include <sys/types.h>
 #include <time.h>
 
-#ifndef CRONDIR
-#define CRONDIR "/var/spool/cron/crontabs"
-#endif
+#include "config.h"
 
 /*
  * eventmask is
- * 60 bits for minute, 31 bits for mday, 24 bits for hour, 12 bits for month, and
- * 7 bits for wday
+ * 60 bits for minute,
+ * 31 bits for mday,
+ * 24 bits for hour,
+ * 12 bits for month,
+ *  7 bits for wday
  */
-/* assume sizeof(long long) >= 8, sizeof(int) >= 4, sizeof(short) >= 2 */
+
 #define CBIT(t)		(1 << (t))
 
 typedef struct {
-    unsigned long minutes[2];	/* 60 bits worth */
-    unsigned int hours;		/* 24 bits worth */
-    unsigned int mday;		/* 31 bits worth */
-    unsigned short wday;	/*  7 bits worth */
-    unsigned short month;	/* 12 bits worth */
+    DWORD minutes[2];	/* 60 bits worth */
+    DWORD hours;	/* 24 bits worth */
+    DWORD mday;		/* 31 bits worth */
+    WORD  wday;		/*  7 bits worth */
+    WORD  month;	/* 12 bits worth */
 } Evmask;
 
 

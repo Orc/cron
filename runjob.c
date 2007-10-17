@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <stdlib.h>
@@ -113,6 +114,7 @@ runjob(crontab *tab, int job)
     else {
 	fd_set readers, errors;
 	int rc,status;
+	char peek[1];
 
 	fflush(stdin);
 	dup2(io[0], 0);
@@ -123,7 +125,7 @@ runjob(crontab *tab, int job)
 	    FD_ZERO(&errors);  FD_SET(0, &errors);
 	} while (select(1, &readers, 0, &errors, 0) == 0);
 
-	if (FD_ISSET(0, &readers) && !FD_ISSET(0, &errors) ) {
+	if (FD_ISSET(0, &readers) && (recv(0, peek, 1, MSG_PEEK) == 1) ) {
 	    char subject[120];
 	    char *to = mailto(tab);
 

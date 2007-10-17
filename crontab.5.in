@@ -87,9 +87,16 @@ MAILTO=orc@mailhost.org
 .br
 (if you're awake)
 .fi
+.Sh FILES
+.Bl -tag -width @CRONDIR@
+.It Pa @CRONDIR@
+Where 
+.Xr cron 8
+looks for crontabs.
+.El
 .Sh SEE ALSO
-.Xr cron 8 ,
-.Xr crontab 1 .
+.Xr crontab 1 ,
+.Xr cron 8 .
 .Sh EXTENSIONS
 Environment variables and job lines may be extended over multiple lines 
 by escaping end of lines with \\ .

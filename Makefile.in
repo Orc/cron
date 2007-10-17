@@ -1,0 +1,40 @@
+CC=@CC@
+CFLAGS=@CFLAGS@
+LDFLAGS=@LDFLAGS@
+
+prefix=@prefix@
+bindir=@bindir@
+sbindir=@sbindir@
+mandir=@mandir@
+
+progs=cron crontab
+
+common=readcrontab.o lib.o
+
+all: $(progs)
+
+install: $(progs)
+	@INSTALL_DIR@ $(DESTDIR)$(sbindir)
+	@INSTALL_DIR@ $(DESTDIR)$(bindir)
+	for d in 1 5 8; do \
+	    @INSTALL_DIR@ $(DESTDIR)$(mandir)/man$$d; \
+	done
+	@INSTALL_PROGRAM@ -c -m 700 cron $(DESTDIR)$(sbindir)/cron
+	@INSTALL_PROGRAM@ -c -m 4711 crontab $(DESTDIR)$(bindir)/crontab
+	@INSTALL_DATA@ -c cron.8 $(DESTDIR)$(mandir)/man8
+	@INSTALL_DATA@ -c crontab.5 $(DESTDIR)$(mandir)/man5
+	@INSTALL_DATA@ -c crontab.1 $(DESTDIR)$(mandir)/man1
+
+
+
+cron: cron.o runjob.o $(common)
+	$(CC) -o cron cron.o runjob.o $(common)
+
+crontab: crontab.o $(common)
+	$(CC) -o crontab crontab.o $(common)
+
+clean:
+	rm -f $(pgm) *.o
+
+spotless distclean: clean
+	rm -f @GENERATED_FILES@ @CONFIGURE_FILES@

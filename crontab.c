@@ -12,6 +12,9 @@
 #include <syslog.h>
 #include <string.h>
 #include <utime.h>
+#if HAVE_LIBGEN_H
+#   include <libgen.h>
+#endif
 
 #include "cron.h"
 
@@ -226,7 +229,14 @@ main(int argc, char **argv)
 
     opterr = 1;
 
+#if HAVE_BASENAME
     pgm = basename(argv[0]);
+#else
+    if (pgm = strrchr(argv[0], '/') )
+	++pgm;
+    else
+	pgm = argv[0];
+#endif
 
     if ( (pwd = getpwuid(getuid())) == 0 )
 	fatal("you don't seem to have a password entry?\n");

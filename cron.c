@@ -283,6 +283,7 @@ main(int argc, char **argv)
     ct_dirtime = 0;
 
     openlog("cron", LOG_PID, LOG_CRON);
+    syslog(LOG_INFO, "startup");
 
     daemonize();
 
