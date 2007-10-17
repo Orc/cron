@@ -117,29 +117,6 @@ process(char *file)
 }
 
 
-/* erase the contents of a crontab, leaving the arrays allocated for
- * later use.
- */
-void
-zerocrontab(crontab *tab)
-{
-    int i;
-
-    if (tab == 0) return;
-
-    for (i=0; i < tab->nre; ++i)
-	free(tab->env[i]);
-    tab->nre = 0;
-
-    for (i=0; i < tab->nrl; ++i) {
-	free(tab->list[i].command);
-	if (tab->list[i].input)
-	    free(tab->list[i].input);
-    }
-    tab->nrl = 0;
-}
-
-
 /* verify that the CRONDIR is a legitimate path
  */
 static void
@@ -304,7 +281,7 @@ main(int argc, char **argv)
 
     ct_dirtime = 0;
 
-    openlog("cron", 0, LOG_CRON);
+    openlog("cron", LOG_PID, LOG_CRON);
 
     daemonize();
 

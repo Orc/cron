@@ -34,13 +34,16 @@ argument
 which is the number of minutes between
 .Nm cron
 runs.
+.Sh BUGS
+.Nm
+doesn't understand the idea of daylight savings time.
 .Sh FILES
-.Bl -tag -width Pa /var/spool/cron/crontabs
+.Bl -tag -width /var/spool/cron/crontabs
 .It Pa /var/spool/cron/crontabs
 Where crontabs are found.
 .El
 .Sh SEE ALSO
-.Xr crontab 5 ,
-.Xr crontab 1 .
+.Xr crontab 1 ,
+.Xr crontab 5 .
 .Sh AUTHOR
 David Parsons (orc@pell.chi.il.us)

@@ -16,7 +16,6 @@
 
 #include "cron.h"
 
-
 typedef void (*ef)(Evmask*,int);
 
 /* a constraint defines part of a time spec.
@@ -72,17 +71,6 @@ static constraint months =  { 1, 12, "months",  smonth };
 static constraint wday =    { 0,  7, "day of the week", swday };
 
 
-/* eat leading blanks on a line
- */
-char*
-firstnonblank(char *s)
-{
-    while (*s && isspace(*s)) ++s;
-
-    return s;
-}
-
-
 /* check a number against a constraint.
  */
 static int
@@ -90,6 +78,9 @@ constrain(int num, constraint *limit)
 {
     return (num >= limit->min) || (num <= limit->max);
 }
+
+
+static int logicalline;
 
 
 /* pick a number off the front of a string, validate it,
@@ -103,13 +94,13 @@ number(char **s, constraint *limit)
 
     num = strtoul(*s, &e, 10);
     if (e == *s) {
-	error("badly formed %s string (%s) ", limit ? limit->units : "time", e);
+	error("line %d: badly formed %s string <%s> ", logicalline, limit ? limit->units : "time", e);
 	return 0;
     }
 
     if (limit) {
 	if (constrain(num, limit) == 0) {
-	    error("bad number in %s", limit->units);
+	    error("line %d: bad number in %s", logicalline, limit->units);
 	    return 0;
 	}
     }
@@ -173,10 +164,8 @@ parse(char *s, cron *job, constraint *limit)
 	    assign(num, &job->trigger, limit->setter);
 
 	if (isspace(*s)) return firstnonblank(s);
-	else if (*s != ',') {
-	    error("malformed crontab entry <%s>", s);
+	else if (*s != ',') 
 	    return 0;
-	}
 	++s;
     } while (1);
 }
@@ -240,7 +229,7 @@ jobenv(crontab *tab, char *env)
 
 /* compile a crontab
  */
-void
+int
 readcrontab(crontab *tab, FILE *f)
 {
     struct stat st;
@@ -248,7 +237,8 @@ readcrontab(crontab *tab, FILE *f)
     struct passwd *user;
     cron job;
 
-    while ( s = fgetlol(f) ) {
+    lineno = 0;
+    while ( (logicalline=lineno+1), (s = fgetlol(f)) ) {
 	s = firstnonblank(s);
 
 	if (*s == 0 || *s == '#' || *s == '\n')
@@ -270,7 +260,10 @@ readcrontab(crontab *tab, FILE *f)
 	    job.input =  p ? xstrdup(p, "readcrontab::input") : 0;
 	    anotherjob(tab, &job);
 	}
+	else
+	    return 0;
     }
+    return 1;
 }
 
 

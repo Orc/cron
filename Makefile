@@ -1,13 +1,16 @@
 CC=cc -baout -g -DDEBUG
 progs=cron crontab
 
-objs=cron.o readcrontab.o runjob.o lib.o
+common=readcrontab.o lib.o
 
 all: $(progs)
 
 
-cron: $(objs)
-	$(CC) -o cron $(objs)
+cron: cron.o $(common)
+	$(CC) -o cron cron.o runjob.o $(common)
+
+crontab: crontab.o $(common)
+	$(CC) -o crontab crontab.o $(common)
 
 clean:
 	rm -f $(pgm) *.o

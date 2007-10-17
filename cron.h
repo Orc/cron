@@ -48,7 +48,7 @@ typedef struct {
 } crontab;
 
 
-void readcrontab(crontab *, FILE*);
+int readcrontab(crontab *, FILE*);
 void zerocrontab(crontab *);
 void tmtoEvmask(struct tm *,int,Evmask*);
 time_t mtime(char *);
@@ -65,7 +65,11 @@ void runjob(crontab *, int);
 
 void *xrealloc(void*,int,int);
 char *fgetlol(FILE*);
+char *firstnonblank(char*);
 void error(char*,...);
 void fatal(char*,...);
+
+extern int interactive;
+extern int lineno;
 
 #endif

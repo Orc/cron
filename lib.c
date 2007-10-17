@@ -13,6 +13,7 @@
 #include "cron.h"
 
 int interactive = 1;
+int lineno;
 
 
 /* (re)allocate memory or die.
@@ -89,12 +90,14 @@ fgetlol(FILE *f)
 	if ( c == '\\')  {
 	    if ( (c = fgetc(f)) == EOF )
 		break;
+	    if (c == '\n') ++lineno;
 	    line[nrl++] = c;
 	    continue;
 	}
 	else if ( c == '%' )
 	    c = '\n';
 	else if ( c == '\n' ) {
+	    ++lineno;
 	    line[nrl] = 0;
 	    return line;
 	}
@@ -124,4 +127,38 @@ mtime(char *path)
     error("can't stat %s -- returning current time", path);
     time(&now);
     return now;
+}
+
+
+/* erase the contents of a crontab, leaving the arrays allocated for
+ * later use.
+ */
+void
+zerocrontab(crontab *tab)
+{
+    int i;
+
+    if (tab == 0) return;
+
+    for (i=0; i < tab->nre; ++i)
+	free(tab->env[i]);
+    tab->nre = 0;
+
+    for (i=0; i < tab->nrl; ++i) {
+	free(tab->list[i].command);
+	if (tab->list[i].input)
+	    free(tab->list[i].input);
+    }
+    tab->nrl = 0;
+}
+
+
+/* eat leading blanks on a line
+ */
+char*
+firstnonblank(char *s)
+{
+    while (*s && isspace(*s)) ++s;
+
+    return s;
 }
