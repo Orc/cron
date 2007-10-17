@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <syslog.h>
 #include <string.h>
+#include <utime.h>
 
 #include "cron.h"
 
@@ -80,6 +81,7 @@ newcrontab(char *file, char *name, int zap)
     int tempfile = 0;
     register c;
     FILE *in, *out;
+    struct utimbuf touch;
 
     umask(077);
 
@@ -134,6 +136,9 @@ newcrontab(char *file, char *name, int zap)
 	    fatal("can't write to crontab: %s", strerror(errno));
 	}
 	fclose(in);
+	time(&touch.modtime);
+	time(&touch.actime);
+	utime(".", &touch);
 	exit(0);
     }
     if (zap) unlink(file);
@@ -153,9 +158,11 @@ visual(struct passwd *pwd)
     char *editor;
     char *yn;
     struct stat st;
+    int save_euid = geteuid();
 
     xchdir(pwd->pw_dir ? pwd->pw_dir : "/tmp");
     strcpy(tempfile, ".crontab.XXXXXX");
+    seteuid(getuid());
     mktemp(tempfile);
 
     if ( ((editor = getenv("EDITOR")) == 0) && ((editor = getenv("VISUAL")) == 0) )
@@ -176,11 +183,13 @@ visual(struct passwd *pwd)
     while (1) {
 	if ( system(commandline) == -1 )
 	    fatal("running %s: %s", editor, strerror(errno));
+	seteuid(save_euid);
 	if ( (stat(tempfile, &st) == -1) || (st.st_size == 0)
 	                                 || newcrontab(tempfile, pwd->pw_name, 1)) {
 	    unlink(tempfile);
 	    exit(0);
 	}
+	seteuid(getuid());
 	do {
 	    fprintf(stderr, "Do you want to retry the same edit? ");
 	    fgets(ans, sizeof ans, stdin);

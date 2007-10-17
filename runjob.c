@@ -52,6 +52,15 @@ runjob(crontab *tab, int job)
 	return;
     }
 
+#if DEBUG
+    printtrig(&tab->list[job].trigger);
+    printf("%s", tab->list[job].command);
+    if (tab->list[job].input)
+	printf("<< \\EOF\n%sEOF\n", tab->list[job].input);
+    else
+	putchar('\n');
+#endif
+
     if ( (pid = fork()) == -1 ) { error("fork(): %s", strerror(errno)); return; }
 
     if (pid > 0) return;
@@ -99,6 +108,7 @@ runjob(crontab *tab, int job)
 	    pclose(f);
 	}
 	else fatal("popen(): %s", strerror(errno));
+	waitpid(pid, &i, 0);
     }
     else {
 	fd_set readers, errors;
@@ -113,7 +123,7 @@ runjob(crontab *tab, int job)
 	    FD_ZERO(&errors);  FD_SET(0, &errors);
 	} while (select(1, &readers, 0, &errors, 0) == 0);
 
-	if (FD_ISSET(0, &readers)) {
+	if (FD_ISSET(0, &readers) && !FD_ISSET(0, &errors) ) {
 	    char subject[120];
 	    char *to = mailto(tab);
 

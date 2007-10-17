@@ -30,12 +30,13 @@ static int ct_add, ct_update, ct_inact;
  * more
  */
 static void
-eat()
+eat(int sig)
 {
     int status;
 
-    while (waitpid(0, &status, WNOHANG) != -1)
+    while (waitpid(-1, &status, WNOHANG) != -1)
 	;
+    signal(SIGCHLD, eat);
 }
 
 
@@ -244,11 +245,11 @@ daemonize()
     pid_t pid = fork();
 
     if (pid == -1) fatal("backgrounding: %s", strerror(errno));
-    if (pid == 0) exit(0);
+    if (pid != 0) exit(0);
     setsid();
     pid = fork();
     if (pid == -1) fatal("double-fork: %s", strerror(errno));
-    if (pid == 0) exit(0);
+    if (pid != 0) exit(0);
     interactive = 0;
 #endif
 }
