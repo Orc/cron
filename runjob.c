@@ -79,7 +79,7 @@ runjob(crontab *tab, int job)
     if ( chdir(pwd->pw_dir ? pwd->pw_dir : "/tmp") == -1 )
 	fatal("chdir(\"%s\"): %s", pwd->pw_dir ? pwd->pw_dir : "/tmp", strerror(errno));
 
-    if ( pipe(io) == -1 ) fatal("pipe: %s", strerror(errno));
+    if ( socketpair(AF_UNIX, SOCK_STREAM, 0, io) == -1 ) fatal("socketpair: %s", strerror(errno));
 
     pid = fork();
 
