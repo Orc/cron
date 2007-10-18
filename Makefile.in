@@ -3,7 +3,7 @@ CFLAGS=@CFLAGS@
 LDFLAGS=@LDFLAGS@
 
 prefix=@prefix@
-bindir=@bindir@
+bindir=@exedir@
 sbindir=@sbindir@
 mandir=@mandir@
 
