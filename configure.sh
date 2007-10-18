@@ -6,7 +6,8 @@
 # make certain that what you quote is what you want to quote.
 
 ac_help='
---with-crondir=PATH	Where does the crontab directory go?'
+--with-crondir=PATH	Where does the crontab directory go?
+--with-mail=PATH	What program to use to send mail (mail)'
 
 # load in the configuration file
 #
@@ -22,6 +23,12 @@ AC_CHECK_ALLOCA || AC_FAIL "$TARGET requires alloca()"
 # for basename
 if AC_CHECK_FUNCS basename; then
     AC_CHECK_HEADERS libgen.h
+fi
+
+if [ "$WITH_MAIL" ]; then
+    AC_DEFINE PATH_MAIL \"${WITH_MAIL}\"
+else
+    MF_PATH_INCLUDE MAIL mail || AC_FAIL "$TARGET requires a mail program"
 fi
 
 if [ "$WITH_CRONDIR" ]; then

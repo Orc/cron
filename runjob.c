@@ -35,16 +35,6 @@ jobenv(crontab *tab, char *name)
 }
 
 
-/* pull a MAILTO value out of the job environment, if any
- * was defined
- */
-static char *
-mailto(crontab *tab)
-{
-    return jobenv(tab, "MAILTO");
-}
-
-
 /* run a job, mail output (if any) to the user.
  */
 void
@@ -143,14 +133,14 @@ runjob(crontab *tab, int job)
 
 	if (FD_ISSET(0, &readers) && (recv(0, peek, 1, MSG_PEEK) == 1) ) {
 	    char subject[120];
-	    char *to = mailto(tab);
+	    char *to = jobenv(tab, "MAILTO");
 
 	    if (to == 0) to = pwd->pw_name;
 
 	    snprintf(subject, sizeof subject, "Cron <%s> %s", to, tab->list[job].command);
-	    execl("/bin/mail", "mail", "-s", subject, to, 0L);
+	    execl(PATH_MAIL, "mail", "-s", subject, to, 0L);
 
-	    fatal("can't execl(\"/bin/mail\",...): %s", strerror(errno));
+	    fatal("can't execl(\"%s\",...): %s", PATH_MAIL, strerror(errno));
 	}
     }
     exit(0);
