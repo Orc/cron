@@ -29,18 +29,6 @@ usage()
 }
 
 
-/* change directory or die
- */
-void
-xchdir(char *path)
-{
-    if (chdir(path) == -1) {
-	perror(path);
-	exit(1);
-    }
-}
-
-
 /* pick up our superpowers (if any)
  */
 void

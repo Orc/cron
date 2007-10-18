@@ -162,3 +162,13 @@ firstnonblank(char *s)
 
     return s;
 }
+
+
+/* change directory or die
+ */
+void
+xchdir(char *path)
+{
+    if (chdir(path) == -1)
+	fatal("%s: %s", path, strerror(errno));
+}

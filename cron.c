@@ -275,8 +275,7 @@ main(int argc, char **argv)
     else if (interval < 1)
 	interval = 1;
 
-    if (chdir(CRONDIR) != 0)
-	fatal("can't chdir into crontabs: %s", strerror(errno) );
+    xchdir(CRONDIR);
 
     securepath(CRONDIR);
 
