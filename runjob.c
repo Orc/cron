@@ -16,8 +16,24 @@
 #include <stdarg.h>
 #include <dirent.h>
 #include <errno.h>
+#include <paths.h>
 
 #include "cron.h"
+
+
+/* pull a random value out of the cron environment
+ */
+static char *
+jobenv(crontab *tab, char *name)
+{
+    int i, len = strlen(name);
+
+    for (i=0; i < tab->nre; ++i)
+	if ( strncmp(tab->env[i], name, len) == 0 && (tab->env[i][len] == '=') )
+	    return 1 + len + tab->env[i];
+    return 0;
+}
+
 
 /* pull a MAILTO value out of the job environment, if any
  * was defined
@@ -25,12 +41,7 @@
 static char *
 mailto(crontab *tab)
 {
-    int i;
-
-    for (i=0; i < tab->nre; ++i)
-	if ( strncmp(tab->env[i], "MAILTO=", 7) == 0 )
-	    return tab->env[i] + 7;
-    return 0;
+    return jobenv(tab, "MAILTO");
 }
 
 
@@ -100,6 +111,11 @@ runjob(crontab *tab, int job)
 
 	for (i=0; i < tab->nre; i++)
 	    putenv(tab->env[i]);
+
+	if (!jobenv(tab,"HOME"))
+	    setenv("HOME", pwd->pw_dir, 1);
+	if (!jobenv(tab,"PATH"))
+	    setenv("PATH", _PATH_DEFPATH, 1);
 
 	if ( f = popen(tab->list[job].command, "w") ) {
 	    if (tab->list[job].input) {
