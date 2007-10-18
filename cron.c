@@ -17,6 +17,8 @@
 
 #include "cron.h"
 
+char *pgm;
+
 /* keep all the crontabs in a sorted-by-uid array, 
  */
 crontab *tabs = 0;
@@ -267,6 +269,7 @@ main(int argc, char **argv)
     struct stat st;
     time_t ct_dirtime;
 
+    pgm = argv[0];
     if ( argc > 1)
 	interval = atoi(argv[1]);
 

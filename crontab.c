@@ -66,7 +66,7 @@ cat(char *file)
 /* put a new crontab into CRONDIR
  */
 int
-newcrontab(char *file, char *name, int zap)
+newcrontab(char *file, char *name)
 {
     static crontab tab = { 0 };
     int tempfile = 0;
@@ -92,8 +92,9 @@ newcrontab(char *file, char *name, int zap)
 	    error("can't store crontab in tempfile: %s", strerror(errno));
 	    return 0;
 	}
-	if (size == 0)
+	if (size == 0) {
 	    fatal("no input; use -r to delete a crontab");
+	}
 	tempfile = 1;
     }
     else {
@@ -127,8 +128,7 @@ newcrontab(char *file, char *name, int zap)
     if ( out = fopen(name, "w") ) {
 	while ( ((c = fgetc(in)) != EOF) && (fputc(c,out) != EOF) )
 	    ;
-	if (zap) unlink(file);
-	if ( ferror(in) || ferror(out) || (fclose(out) == EOF) ) {
+	if ( ferror(out) || (fclose(out) == EOF) ) {
 	    unlink(name);
 	    fatal("can't write to crontab: %s", strerror(errno));
 	}
@@ -138,8 +138,18 @@ newcrontab(char *file, char *name, int zap)
 	utime(".", &touch);
 	exit(0);
     }
-    if (zap) unlink(file);
     fatal("can't write to crontab: %s", strerror(errno));
+}
+
+
+static char vitemp[24];
+
+/* erase the tempfile when the program exits
+ */
+static void
+nomorevitemp()
+{
+    unlink(vitemp);
 }
 
 
@@ -149,7 +159,6 @@ newcrontab(char *file, char *name, int zap)
 void
 visual(struct passwd *pwd)
 {
-    char tempfile[20];
     char ans[20];
     char commandline[80];
     char *editor;
@@ -158,44 +167,40 @@ visual(struct passwd *pwd)
     int save_euid = geteuid();
 
     xchdir(pwd->pw_dir ? pwd->pw_dir : "/tmp");
-    strcpy(tempfile, ".crontab.XXXXXX");
+    strcpy(vitemp, "/tmp/.crontab.XXXXXX");
     seteuid(getuid());
-    mktemp(tempfile);
+    mktemp(vitemp);
+
+    atexit(nomorevitemp);
 
     if ( ((editor = getenv("EDITOR")) == 0) && ((editor = getenv("VISUAL")) == 0) )
 	editor="vi";
 
-    if ( access(editor, X_OK) == 0 ) {
-	unlink(tempfile);
+    if ( access(editor, X_OK) == 0 )
 	fatal("%s: %s", editor, strerror(errno));
-    }
 
-    sprintf(commandline, "crontab -l > %s", tempfile);
+    sprintf(commandline, "crontab -l > %s", vitemp);
     system(commandline);
 
-    if ( (stat(tempfile, &st) != -1) && (st.st_size == 0) )
-	unlink(tempfile);
+    if ( (stat(vitemp, &st) != -1) && (st.st_size == 0) )
+	unlink(vitemp);
 
-    sprintf(commandline, "%s %s", editor, tempfile);
+    sprintf(commandline, "%s %s", editor, vitemp);
     while (1) {
 	if ( system(commandline) == -1 )
 	    fatal("running %s: %s", editor, strerror(errno));
 	seteuid(save_euid);
-	if ( (stat(tempfile, &st) == -1) || (st.st_size == 0)
-	                                 || newcrontab(tempfile, pwd->pw_name, 1)) {
-	    unlink(tempfile);
+	if ( (stat(vitemp, &st) == -1) || (st.st_size == 0)
+	                                 || newcrontab(vitemp, pwd->pw_name))
 	    exit(0);
-	}
 	seteuid(getuid());
 	do {
 	    fprintf(stderr, "Do you want to retry the same edit? ");
 	    fgets(ans, sizeof ans, stdin);
 	    yn = firstnonblank(ans);
 	    *yn = toupper(*yn);
-	    if (*yn == 'N') {
-		unlink(tempfile);
+	    if (*yn == 'N')
 		exit(1);
-	    }
 	    if (*yn != 'Y')
 		fprintf(stderr, "(Y)es or (N)o; ");
 	} while (*yn != 'Y');
@@ -266,14 +271,12 @@ main(int argc, char **argv)
     else if (remove) {
 	superpowers();
 	xchdir(CRONDIR);
-	if (unlink(pwd->pw_name) == -1) {
-	    perror(pwd->pw_name);
-	    exit(1);
-	}
+	if (unlink(pwd->pw_name) == -1)
+	    fatal("%s: %s", pwd->pw_name, strerror(errno));
     }
     else if (edit)
 	visual(pwd);
-    else if ( !newcrontab( argc ? argv[0] : "-", pwd->pw_name, 0) )
+    else if ( !newcrontab( argc ? argv[0] : "-", pwd->pw_name) )
 	exit(1);
     exit(0);
 }

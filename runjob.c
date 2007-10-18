@@ -20,6 +20,8 @@
 
 #include "cron.h"
 
+extern char *pgm;
+
 
 /* pull a random value out of the cron environment
  */
@@ -68,8 +70,9 @@ runjob(crontab *tab, int job)
     if (pid > 0) return;
 
 
-    /* from this point on, we're the child process and should fatal() if anything
-     * goes wrong
+    strcpy(pgm, "runj");
+    /* from this point on, we're the child process and should fatal() if
+     * anything goes wrong
      */
 
     if ( setregid(pwd->pw_gid, pwd->pw_gid) == -1)
@@ -90,6 +93,7 @@ runjob(crontab *tab, int job)
 	FILE *f;
 	int i;
 
+	strcpy(pgm,"cmdj");
 	syslog(LOG_INFO, "(%s) CMD (%s)", pwd->pw_name, tab->list[job].command);
 
 	fflush(stdout);
@@ -115,7 +119,7 @@ runjob(crontab *tab, int job)
 	    pclose(f);
 	}
 	else fatal("popen(): %s", strerror(errno));
-	waitpid(pid, &i, 0);
+	strcpy(pgm,"waij");
     }
     else {
 	fd_set readers, errors;
@@ -126,11 +130,13 @@ runjob(crontab *tab, int job)
 	dup2(io[0], 0);
 	close(io[1]);
 
+	strcpy(pgm,"selj");
 	do {
 	    FD_ZERO(&readers); FD_SET(0, &readers);
 	    FD_ZERO(&errors);  FD_SET(0, &errors);
 	} while (select(1, &readers, 0, &errors, 0) == 0);
 
+	strcpy(pgm, "maij");
 	if (FD_ISSET(0, &readers) && (recv(0, peek, 1, MSG_PEEK) == 1) ) {
 	    char subject[120];
 	    char *to = jobenv(tab, "MAILTO");
