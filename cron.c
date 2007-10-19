@@ -293,6 +293,8 @@ main(int argc, char **argv)
 
     while (1) {
 	time_t newtime = mtime(".");
+	struct tm *tm;
+	int adjust;
 
 	if (newtime != ct_dirtime) {
 	    scanctdir();
@@ -306,7 +308,8 @@ main(int argc, char **argv)
 	}
 
 	time(&ticks);
-	tmtoEvmask(localtime(&ticks),interval,&Now);
+	tm = localtime(&ticks);
+	tmtoEvmask(tm,interval,&Now);
 
 #if DEBUG
 	printf("run Evmask:");printtrig(&Now); putchar('\n');
@@ -317,7 +320,12 @@ main(int argc, char **argv)
 		if ( (tabs[i].flags & ACTIVE) && triggered(&Now, &(tabs[i].list[j].trigger)) )
 		    runjob(&tabs[i], j);
 
-	for (left = 60 * interval; left > 0; left = sleep(left))
+	adjust = 30 - tm->tm_sec;
+#if DEBUG
+	if ( adjust < -15 || adjust > 15 ) error("adjust: %d", adjust);
+#endif
+
+	for (left = adjust + (60 * interval); left > 0; left = sleep(left))
 	    ;
     }
 }
