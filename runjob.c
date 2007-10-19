@@ -16,25 +16,10 @@
 #include <stdarg.h>
 #include <dirent.h>
 #include <errno.h>
-#include <paths.h>
 
 #include "cron.h"
 
 extern char *pgm;
-
-
-/* pull a random value out of the cron environment
- */
-static char *
-jobenv(crontab *tab, char *name)
-{
-    int i, len = strlen(name);
-
-    for (i=0; i < tab->nre; ++i)
-	if ( strncmp(tab->env[i], name, len) == 0 && (tab->env[i][len] == '=') )
-	    return 1 + len + tab->env[i];
-    return 0;
-}
 
 
 /* run a job, mail output (if any) to the user.
@@ -43,8 +28,9 @@ void
 runjob(crontab *tab, int job)
 {
     pid_t pid;
-    int io[2];
+    int mailpipe[2], jobinput[2];
     struct passwd *pwd;
+    char *shell;
 
     if ( (pwd = getpwuid(tab->user)) == 0 ) {
 	/* if we can't find a password entry for this crontab, 
@@ -55,6 +41,13 @@ runjob(crontab *tab, int job)
 	time(&tab->mtime);
 	return;
     }
+
+    if ( (shell = jobenv(tab, "SHELL")) == 0 ) {
+	error("corrupt job structure for %s", pwd->pw_name);
+	time(&tab->mtime);
+	return;
+    }
+
 
 #if DEBUG
     printtrig(&tab->list[job].trigger);
@@ -83,7 +76,7 @@ runjob(crontab *tab, int job)
     if ( chdir(pwd->pw_dir ? pwd->pw_dir : "/tmp") == -1 )
 	fatal("chdir(\"%s\"): %s", pwd->pw_dir ? pwd->pw_dir : "/tmp", strerror(errno));
 
-    if ( socketpair(AF_UNIX, SOCK_STREAM, 0, io) == -1 ) fatal("socketpair: %s", strerror(errno));
+    if ( socketpair(AF_UNIX, SOCK_STREAM, 0, mailpipe) == -1 ) fatal("socketpair: %s", strerror(errno));
 
     pid = fork();
 
@@ -92,34 +85,31 @@ runjob(crontab *tab, int job)
     if (pid == 0) {
 	FILE *f;
 	int i;
+	pid_t jpid;
 
 	strcpy(pgm,"cmdj");
 	syslog(LOG_INFO, "(%s) CMD (%s)", pwd->pw_name, tab->list[job].command);
 
-	fflush(stdout);
-	fflush(stderr);
+	dup2(mailpipe[1], 1);
+	dup2(mailpipe[1], 2);
+	close(mailpipe[0]);
 
-	dup2(io[1], 1);
-	dup2(io[1], 2);
-	close(io[0]);
+	if ( pipe(jobinput) == -1 )
+	    fatal("cannot create input pipe: %s", strerror(errno));
 
-	for (i=0; i < tab->nre; i++)
-	    putenv(tab->env[i]);
+	if ( (jpid = fork()) == -1 )
+	    fatal("cannot fork: %s", strerror(errno));
 
-	if (!jobenv(tab,"HOME"))
-	    setenv("HOME", pwd->pw_dir, 1);
-	if (!jobenv(tab,"PATH"))
-	    setenv("PATH", _PATH_DEFPATH, 1);
-
-	if ( f = popen(tab->list[job].command, "w") ) {
-	    if (tab->list[job].input) {
-		fputs(tab->list[job].input, f);
-		fputc('\n', f);
-	    }
-	    pclose(f);
+	if (jpid == 0) {
+	    dup2(jobinput[0], 0);
+	    close(jobinput[1]);
+	    execle(shell, "sh", "-c", tab->list[job].command, 0L, tab->env);
+	    fatal("cannot exec %s: %s", shell, strerror(errno));
 	}
-	else fatal("popen(): %s", strerror(errno));
-	strcpy(pgm,"waij");
+	close(jobinput[0]);
+	if (tab->list[job].input)
+	    write(jobinput[1], tab->list[job].input,
+			strlen(tab->list[job].input));
     }
     else {
 	fd_set readers, errors;
@@ -127,8 +117,8 @@ runjob(crontab *tab, int job)
 	char peek[1];
 
 	fflush(stdin);
-	dup2(io[0], 0);
-	close(io[1]);
+	dup2(mailpipe[0], 0);
+	close(mailpipe[1]);
 
 	strcpy(pgm,"selj");
 	do {
@@ -143,8 +133,9 @@ runjob(crontab *tab, int job)
 
 	    if (to == 0) to = pwd->pw_name;
 
-	    snprintf(subject, sizeof subject, "Cron <%s> %s", to, tab->list[job].command);
-	    execl(PATH_MAIL, "mail", "-s", subject, to, 0L);
+	    snprintf(subject, sizeof subject,
+			     "Cron <%s> %s", to, tab->list[job].command);
+	    execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
 
 	    fatal("can't execl(\"%s\",...): %s", PATH_MAIL, strerror(errno));
 	}

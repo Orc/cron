@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <syslog.h>
+#include <paths.h>
 
 #include "cron.h"
 
@@ -51,6 +52,18 @@ cmptabs(const void *c1, const void *c2)
 	    *b = (crontab*)c2;
 
     return a->user - b->user;
+}
+
+
+/* construct an environment entry
+ */
+static char *
+environment(char *who, char *what)
+{
+    char *ptr = xrealloc(0, strlen(who)+strlen(what)+2, 1);
+
+    sprintf(ptr, "%s=%s", who, what);
+    return ptr;
 }
 
 
@@ -110,6 +123,16 @@ process(char *file)
     }
 
     if ( f = fopen(file,"r") ) {
+	/* preload the environment with the settings we absolutely
+	 * positively need.
+	 */
+	EXPAND(ent->env, ent->sze, ent->nre+5);
+	ent->env[ent->nre++] = environment("HOME", user->pw_dir);
+	ent->env[ent->nre++] = environment("USER", user->pw_name);
+	ent->env[ent->nre++] = environment("LOGNAME", user->pw_name);
+	ent->env[ent->nre++] = environment("PATH", _PATH_DEFPATH);
+	ent->env[ent->nre++] = environment("SHELL", _PATH_BSHELL);
+
 	readcrontab(ent, f);
 	if (ent->nrl) ent->flags |= ACTIVE;
 	ent->mtime = st.st_mtime;
@@ -248,6 +271,9 @@ daemonize()
 
     if (pid == -1) fatal("backgrounding: %s", strerror(errno));
     if (pid != 0) exit(0);
+    freopen("/dev/null", "r", stdin);
+    freopen("/dev/null", "w", stdout);
+    freopen("/dev/null", "w", stderr);
     setsid();
     pid = fork();
     if (pid == -1) fatal("double-fork: %s", strerror(errno));
@@ -321,9 +347,7 @@ main(int argc, char **argv)
 		    runjob(&tabs[i], j);
 
 	adjust = 30 - tm->tm_sec;
-#if DEBUG
 	if ( adjust < -15 || adjust > 15 ) error("adjust: %d", adjust);
-#endif
 
 	for (left = adjust + (60 * interval); left > 0; left = sleep(left))
 	    ;

@@ -220,10 +220,25 @@ xstrdup(char *src, char *what)
 /* add an environment variable to the job environment
  */
 static void
-jobenv(crontab *tab, char *env)
+setjobenv(crontab *tab, char *env)
 {
+    char *p;
+    int i;
+
+    if ( env ) {
+	env = xstrdup(env, "setjobenv");
+	if ( (p=strchr(env,'=')) == 0 ) return;
+
+	for (i=0; i < tab->sze; i++)
+	    if (strncmp(tab->env[i], env, (p-env)) == 0) {
+		free(tab->env[i]);
+		tab->env[i] = env;
+		return;
+	    }
+    }
+
     EXPAND(tab->env, tab->sze, tab->nre);
-    tab->env[tab->nre++] = xstrdup(env, "jobenv");
+    tab->env[tab->nre++] = env;
 }
 
 
@@ -250,7 +265,7 @@ readcrontab(crontab *tab, FILE *f)
 	    for (q=s; isalnum(*q); ++q)
 		;
 	    if (*q == '=')
-		jobenv(tab,s);
+		setjobenv(tab,s);
 	}
 	else if (s = getdatespec(s, &job)) {
 	    char *p = strchr(s, '\n');
@@ -260,8 +275,12 @@ readcrontab(crontab *tab, FILE *f)
 	    job.input =  p ? xstrdup(p, "readcrontab::input") : 0;
 	    anotherjob(tab, &job);
 	}
-	else
+	else {
+	    /* null-terminate the env[] array and we're ready to go */
+	    setjobenv(tab, 0);
+
 	    return 0;
+	}
     }
     return 1;
 }
@@ -286,4 +305,18 @@ tmtoEvmask(struct tm *tm, int interval, Evmask *time)
     smday(time, tm->tm_mday);
     smonth(time,tm->tm_mon);
     swday(time, tm->tm_wday);
+}
+
+
+/* pull a random value out of the cron environment
+ */
+char *
+jobenv(crontab *tab, char *name)
+{
+    int i, len = strlen(name);
+
+    for (i=0; i < tab->nre; ++i)
+	if ( strncmp(tab->env[i], name, len) == 0 && (tab->env[i][len] == '=') )
+	    return 1 + len + tab->env[i];
+    return 0;
 }

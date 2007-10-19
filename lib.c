@@ -141,7 +141,8 @@ zerocrontab(crontab *tab)
     if (tab == 0) return;
 
     for (i=0; i < tab->nre; ++i)
-	free(tab->env[i]);
+	if (tab->env[i])
+	    free(tab->env[i]);
     tab->nre = 0;
 
     for (i=0; i < tab->nrl; ++i) {

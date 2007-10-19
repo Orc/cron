@@ -34,7 +34,7 @@ crontab: crontab.o $(common)
 	$(CC) -o crontab crontab.o $(common)
 
 clean:
-	rm -f $(pgm) *.o
+	rm -f $(progs) *.o
 
 spotless distclean: clean
 	rm -f @GENERATED_FILES@ @CONFIGURE_FILES@
