@@ -313,10 +313,10 @@ main(int argc, char **argv)
 
     ct_dirtime = 0;
 
+    daemonize();
+
     openlog("cron", LOG_PID, LOG_CRON);
     syslog(LOG_INFO, "startup");
-
-    daemonize();
 
     signal(SIGCHLD, eat);
     signal(SIGHUP, SIG_IGN);

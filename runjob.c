@@ -72,8 +72,12 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	    case 0: setsid();
 		    dup2(jobinput[0], 0);
 		    close(jobinput[1]);
+
+		    syslog(LOG_INFO, "(%s) CMD (%s)",usr->pw_name,job->command);
+		    closelog();
+
 		    execle(shell, "sh", "-c", job->command, 0L, tab->env);
-		    fatal("cannot exec %s: %s", shell, strerror(errno));
+		    perror(shell);
 		    break;
 	    default:close(jobinput[0]);
 		    if (job->input)
@@ -129,8 +133,6 @@ runjob(crontab *tab, cron *job)
     else
 	putchar('\n');
 #endif
-    syslog(LOG_INFO, "(%s) CMD (%s)", pwd->pw_name, job->command);
-
     switch (fork()) {
     case 0: runjobprocess(tab,job,pwd);		/* should never return */
 	    fatal("runjobprocess returned?");	/* but better safe than sorry */
