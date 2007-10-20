@@ -69,7 +69,8 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	    switch (pid=fork()) {
 	    case -1:fatal("fork(): %s", strerror(errno));
 		    break;
-	    case 0: dup2(jobinput[0], 0);
+	    case 0: setsid();
+		    dup2(jobinput[0], 0);
 		    close(jobinput[1]);
 		    execle(shell, "sh", "-c", job->command, 0L, tab->env);
 		    fatal("cannot exec %s: %s", shell, strerror(errno));

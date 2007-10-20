@@ -85,12 +85,15 @@ fgetlol(FILE *f)
     register c;
 
     while ( (c = fgetc(f)) != EOF ) {
-	EXPAND(line,szl,nrl);
+	EXPAND(line,szl,nrl+1);
 
 	if ( c == '\\')  {
 	    if ( (c = fgetc(f)) == EOF )
 		break;
-	    if (c == '\n') ++lineno;
+	    if (c == '\n')
+		++lineno;
+	    else if (c != '%')
+		line[nrl++] = '\\';
 	    line[nrl++] = c;
 	    continue;
 	}
