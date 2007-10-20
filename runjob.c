@@ -27,29 +27,29 @@ extern char *pgm;
 /* the child process that actually runs a job
  */
 static void
-runjobprocess(crontab *tab,cron *job,struct passwd *user)
+runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 {
     FILE *f;
     pid_t jpid;
-    char *home = user->pw_dir ? user->pw_dir : "/tmp";
+    char *home = usr->pw_dir ? usr->pw_dir : "/tmp";
     fd_set readers, errors;
     int i, rc, status;
     int mailpipe[2], jobinput[2];
     char peek[1];
-    char *shell = jobenv(tab, "SHELL");
+    char subject[120];
+    char *shell, *to;
     pid_t pid;
 
-    if ( shell == 0 )
+    if ( (shell=jobenv(tab, "SHELL")) == 0 )
 	shell = _PATH_BSHELL;
 
-    strcpy(pgm, "crjp");
     setsid();
     signal(SIGCHLD, SIG_DFL);
 
-    if ( setregid(user->pw_gid, user->pw_gid) == -1)
-	fatal("setregid(%d,%d): %s", user->pw_gid, user->pw_gid, strerror(errno));
-    if ( setreuid(user->pw_uid, user->pw_uid) == -1)
-	fatal("setreuid(%d,%d): %s", user->pw_uid, user->pw_uid, strerror(errno));
+    if ( setregid(usr->pw_gid, usr->pw_gid) == -1)
+	fatal("setregid(%d,%d): %s", usr->pw_gid, usr->pw_gid, strerror(errno));
+    if ( setreuid(usr->pw_uid, usr->pw_uid) == -1)
+	fatal("setreuid(%d,%d): %s", usr->pw_uid, usr->pw_uid, strerror(errno));
 
     if ( chdir(home) == -1 )
 	fatal("chdir(\"%s\"): %s", home, strerror(errno));
@@ -59,9 +59,7 @@ runjobprocess(crontab *tab,cron *job,struct passwd *user)
 
     switch (pid=fork()) {
     case -1: fatal("fork(): %s", strerror(errno));
-    case 0: strcpy(pgm,"jrun");
-
-	    dup2(mailpipe[1], 1);
+    case 0: dup2(mailpipe[1], 1);
 	    dup2(mailpipe[1], 2);
 	    close(mailpipe[0]);
 
@@ -85,27 +83,16 @@ runjobprocess(crontab *tab,cron *job,struct passwd *user)
 	    }
 	    break;
     default:
-	    fflush(stdin);
-	    dup2(mailpipe[0], 0);
 	    close(mailpipe[1]);
 
-	    strcpy(pgm,"jwai");
-	    do {
-		FD_ZERO(&readers); FD_SET(0, &readers);
-		FD_ZERO(&errors);  FD_SET(0, &errors);
-	    } while (select(1, &readers, 0, &errors, 0) == 0);
+	    if ( recv(mailpipe[0], peek, 1, MSG_PEEK) == 1 ) {
 
-	    strcpy(pgm, "jmai");
-	    alarm(60);
-	    if (FD_ISSET(0, &readers) && (recv(0, peek, 1, MSG_PEEK) == 1) ) {
-		char subject[120];
-		char *to = jobenv(tab, "MAILTO");
-		alarm(0);
-
-		if (to == 0) to = user->pw_name;
+		if ( (to=jobenv(tab,"MAILTO")) == 0) to = usr->pw_name;
 
 		snprintf(subject, sizeof subject,
 			 "Cron <%s> %s", to, job->command);
+
+		dup2(mailpipe[0], 0);
 		execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
 		fatal("can't execl(\"%s\"): %s", PATH_MAIL, strerror(errno));
 	    }
