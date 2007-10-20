@@ -53,7 +53,7 @@ int readcrontab(crontab *, FILE*);
 void zerocrontab(crontab *);
 void tmtoEvmask(struct tm *,int,Evmask*);
 time_t mtime(char *);
-void runjob(crontab *, int);
+void runjob(crontab *, cron *);
 
 #define EXPAND(t,s,n)	do { \
 			    int _n = (n); \
