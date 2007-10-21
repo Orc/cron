@@ -30,15 +30,14 @@ static void
 runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 {
     FILE *f;
-    pid_t jpid;
+    pid_t mpid, jpid;
     char *home = usr->pw_dir ? usr->pw_dir : "/tmp";
     fd_set readers, errors;
-    int i, rc, status;
-    int mailpipe[2], jobinput[2];
-    char peek[1];
+    int i, rc, size, status;
+    int mailpipe[2], input[2], output[2];
+    char copy[512];
     char subject[120];
     char *shell, *to;
-    pid_t pid;
 
     if ( (shell=jobenv(tab, "SHELL")) == 0 )
 	shell = _PATH_BSHELL;
@@ -54,54 +53,66 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
     if ( chdir(home) == -1 )
 	fatal("chdir(\"%s\"): %s", home, strerror(errno));
 
-    if ( socketpair(AF_UNIX, SOCK_STREAM, 0, mailpipe) == -1 )
-	fatal("socketpair: %s", strerror(errno));
+    if ( (pipe(output) == -1) || (pipe(input) == -1) )
+	fatal("pipe: %s", strerror(errno));
 
-    switch (pid=fork()) {
-    case -1: fatal("fork(): %s", strerror(errno));
-    case 0: dup2(mailpipe[1], 1);
-	    dup2(mailpipe[1], 2);
-	    close(mailpipe[0]);
+    if ( (jpid=fork()) == -1 )
+	fatal("job fork(): %s", strerror(errno));
+    else if ( jpid == 0 ) {			/* the job to run */
+	syslog(LOG_INFO, "(%s) CMD (%s)",usr->pw_name,job->command);
+	closelog();
 
-	    if ( pipe(jobinput) == -1 )
-		fatal("cannot create input pipe: %s", strerror(errno));
+	dup2(input[0], 0);
+	dup2(output[1], 1);
+	dup2(output[1], 2);
+	setsid();
+	close(input[1]);
+	close(output[0]);
 
-	    switch (pid=fork()) {
-	    case -1:fatal("fork(): %s", strerror(errno));
-		    break;
-	    case 0: setsid();
-		    dup2(jobinput[0], 0);
-		    close(jobinput[1]);
+	execle(shell, "sh", "-c", job->command, 0L, tab->env);
+	perror(shell);
+    }
+    else {					/* runjobprocess() */
+	close(output[1]);
+	close(input[0]);
 
-		    syslog(LOG_INFO, "(%s) CMD (%s)",usr->pw_name,job->command);
-		    closelog();
+	if (job->input)
+	    write(input[1], job->input, strlen(job->input));
+	close(input[1]);
 
-		    execle(shell, "sh", "-c", job->command, 0L, tab->env);
-		    perror(shell);
-		    break;
-	    default:close(jobinput[0]);
-		    if (job->input)
-			write(jobinput[1], job->input, strlen(job->input));
-		    close(jobinput[1]);
-		    waitpid(pid, &status, 0);
-		    break;
-	    }
-	    break;
-    default:
-	    close(mailpipe[1]);
+	if ( (size = read(output[0], copy, sizeof copy)) > 0) {
+	    /* job generated output; fork off a mail process and
+	     * hand-shovel all of the mail over to it.
+	     */
+	    int mail[2];
 
-	    if ( recv(mailpipe[0], peek, 1, MSG_PEEK) == 1 ) {
+	    if (pipe(mail) == -1) fatal("mail pipe(): %s", strerror(errno));
 
-		if ( (to=jobenv(tab,"MAILTO")) == 0) to = usr->pw_name;
+	    if ( (mpid=fork()) == -1 )
+		fatal("mail fork(): %s", strerror(errno));
+	    else if ( mpid == 0 ) { 		/* mail job */
+		close(mail[1]);
+		dup2(mail[0], 0);
 
+		if ( (to=jobenv(tab,"MAILTO")) == 0)
+		    to = usr->pw_name;
 		snprintf(subject, sizeof subject,
 			 "Cron <%s> %s", to, job->command);
 
-		dup2(mailpipe[0], 0);
 		execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
-		fatal("can't execl(\"%s\"): %s", PATH_MAIL, strerror(errno));
+		fatal("can't exec(\"%s\"): %s", PATH_MAIL, strerror(errno));
 	    }
-	    break;
+	    else {				/* still runjobprocess() */
+		close(mail[0]);
+		do {
+		    write(mail[1], copy, size);
+		} while ( (size = read(output[0], copy, sizeof copy)) > 0 );
+		close(mail[1]);
+		close(output[0]);
+		waitpid(mpid, &status, 0);	/* wait for mail to finish */
+	    }
+	}
+	waitpid(jpid, &status);			/* wait for job to finish */
     }
     exit(0);
 }
