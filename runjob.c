@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <stdlib.h>
@@ -29,13 +30,11 @@ extern char *pgm;
 static void
 runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 {
-    FILE *f;
-    pid_t mpid, jpid;
+    pid_t jpid;
     char *home = usr->pw_dir ? usr->pw_dir : "/tmp";
-    fd_set readers, errors;
     int i, rc, size, status;
-    int mailpipe[2], input[2], output[2];
-    char copy[512];
+    int input[2], output[2];
+    char peek[1];
     char subject[120];
     char *shell, *to;
 
@@ -53,7 +52,7 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
     if ( chdir(home) == -1 )
 	fatal("chdir(\"%s\"): %s", home, strerror(errno));
 
-    if ( (pipe(output) == -1) || (pipe(input) == -1) )
+    if ( (socketpair(AF_UNIX,SOCK_STREAM,0,output) == -1)||(pipe(input) == -1) )
 	fatal("pipe: %s", strerror(errno));
 
     if ( (jpid=fork()) == -1 )
@@ -63,11 +62,13 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	closelog();
 
 	dup2(input[0], 0);
+	close(input[1]);
+
 	dup2(output[1], 1);
 	dup2(output[1], 2);
-	setsid();
-	close(input[1]);
 	close(output[0]);
+
+	setsid();
 
 	execle(shell, "sh", "-c", job->command, 0L, tab->env);
 	perror(shell);
@@ -80,20 +81,18 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	    write(input[1], job->input, strlen(job->input));
 	close(input[1]);
 
-	if ( (size = read(output[0], copy, sizeof copy)) > 0) {
-	    /* job generated output; fork off a mail process and
-	     * hand-shovel all of the mail over to it.
+	/* horrible kludge:  on linux 2.0.28, running smtpd as a cron
+	 * job results in a zombied smtpd and a runjob subprocess hanging
+	 * on the recv() or a read().  So, wait a second and then check
+	 * to see if the process exists before peeking at output[0]
+	 */
+	sleep(1);
+	if ( waitpid(jpid, &status, WNOHANG) == 0 ) {
+	    /* if there's any output waiting, fire off a mailer to
+	     * send that to the MAILTO address
 	     */
-	    int mail[2];
-
-	    if (pipe(mail) == -1) fatal("mail pipe(): %s", strerror(errno));
-
-	    if ( (mpid=fork()) == -1 )
-		fatal("mail fork(): %s", strerror(errno));
-	    else if ( mpid == 0 ) { 		/* mail job */
-		close(mail[1]);
-		dup2(mail[0], 0);
-
+	    if ( recv(output[0], peek, 1, MSG_PEEK) == 1 ) {
+		dup2(output[0],0);
 		if ( (to=jobenv(tab,"MAILTO")) == 0)
 		    to = usr->pw_name;
 		snprintf(subject, sizeof subject,
@@ -102,17 +101,8 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 		execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
 		fatal("can't exec(\"%s\"): %s", PATH_MAIL, strerror(errno));
 	    }
-	    else {				/* still runjobprocess() */
-		close(mail[0]);
-		do {
-		    write(mail[1], copy, size);
-		} while ( (size = read(output[0], copy, sizeof copy)) > 0 );
-		close(mail[1]);
-		close(output[0]);
-		waitpid(mpid, &status, 0);	/* wait for mail to finish */
-	    }
+	    waitpid(jpid, &status, 0);		/* wait for job to finish */
 	}
-	waitpid(jpid, &status);			/* wait for job to finish */
     }
     exit(0);
 }
