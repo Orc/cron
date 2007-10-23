@@ -61,36 +61,39 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	syslog(LOG_INFO, "(%s) CMD (%s)",usr->pw_name,job->command);
 	closelog();
 
-	dup2(input[0], 0);
-	close(input[1]);
+	setsid();
 
-	dup2(output[1], 1);
-	dup2(output[1], 2);
+	close(input[1]);
 	close(output[0]);
 
-	setsid();
+	close(0); dup2(input[0], 0); close(input[0]);
+	close(1); dup2(output[1], 1);
+	close(2); dup2(1, 2); close(output[1]);
 
 	execle(shell, "sh", "-c", job->command, 0L, tab->env);
 	perror(shell);
     }
     else {					/* runjobprocess() */
-	close(output[1]);
+	pid_t mjpid, sjpid;
 	close(input[0]);
+	close(output[1]);
 
-	if (job->input)
-	    write(input[1], job->input, strlen(job->input));
+	if (job->input) {
+	    if ( (sjpid = fork()) == -1) error("can't send input to %s:%s\n",
+					    job->command, strerror(errno));
+	    else if ( sjpid == 0 ) {
+		close(output[0]);
+		write(input[1], job->input, strlen(job->input));
+		close(input[1]);
+		exit(0);
+	    }
+	}
 	close(input[1]);
 
-	/* horrible kludge:  on linux 2.0.28, running smtpd as a cron
-	 * job results in a zombied smtpd and a runjob subprocess hanging
-	 * on the recv() or a read().  So, wait a second and then check
-	 * to see if the process exists before peeking at output[0]
-	 */
-	sleep(1);
-	if ( waitpid(jpid, &status, WNOHANG) == 0 ) {
-	    /* if there's any output waiting, fire off a mailer to
-	     * send that to the MAILTO address
-	     */
+	if ( (mjpid = fork()) == -1 )
+	    error("can't mail output from %s: %s",
+		    job->command, strerror(errno));
+	else if ( mjpid == 0 ) {
 	    if ( recv(output[0], peek, 1, MSG_PEEK) == 1 ) {
 		dup2(output[0],0);
 		if ( (to=jobenv(tab,"MAILTO")) == 0)
@@ -101,8 +104,11 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 		execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
 		fatal("can't exec(\"%s\"): %s", PATH_MAIL, strerror(errno));
 	    }
-	    waitpid(jpid, &status, 0);		/* wait for job to finish */
 	}
+	waitpid(jpid, &status, 0);		/* wait for job to finish */
+	if (job->input)				/* wait for input feeder to */
+	    waitpid(sjpid, &status, 0);		/* finish */
+	waitpid(mjpid, &status, 0);		/* wait for mailer to finish */
     }
     exit(0);
 }
@@ -134,10 +140,10 @@ runjob(crontab *tab, cron *job)
     else
 	putchar('\n');
 #endif
-    switch (fork()) {
-    case 0: runjobprocess(tab,job,pwd);		/* should never return */
-	    fatal("runjobprocess returned?");	/* but better safe than sorry */
-
-    case -1:error("fork(): %s", strerror(errno));
+    if ( (pid = fork()) == -1 )
+	error("fork(): %s", strerror(errno));
+    else if ( pid == 0 ) {
+	runjobprocess(tab,job,pwd);
+	exit(0);
     }
 }
