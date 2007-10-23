@@ -74,28 +74,20 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	perror(shell);
     }
     else {					/* runjobprocess() */
-	pid_t mjpid, sjpid;
 	close(input[0]);
 	close(output[1]);
 
-	if (job->input) {
-	    if ( (sjpid = fork()) == -1) error("can't send input to %s:%s\n",
-					    job->command, strerror(errno));
-	    else if ( sjpid == 0 ) {
-		close(output[0]);
-		write(input[1], job->input, strlen(job->input));
-		close(input[1]);
-		exit(0);
-	    }
+	if (job->input && (fork() == 0) ) {
+	    close(output[0]);
+	    write(input[1], job->input, strlen(job->input));
+	    close(input[1]);
+	    exit(0);
 	}
 	close(input[1]);
 
-	if ( (mjpid = fork()) == -1 )
-	    error("can't mail output from %s: %s",
-		    job->command, strerror(errno));
-	else if ( mjpid == 0 ) {
-	    if ( recv(output[0], peek, 1, MSG_PEEK) == 1 ) {
-		dup2(output[0],0);
+	if ( fork() == 0 ) {
+	    if (recv(output[0], peek, 1, MSG_PEEK) == 1 ) {
+		close(0);dup2(output[0],0);
 		if ( (to=jobenv(tab,"MAILTO")) == 0)
 		    to = usr->pw_name;
 		snprintf(subject, sizeof subject,
@@ -104,11 +96,12 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 		execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
 		fatal("can't exec(\"%s\"): %s", PATH_MAIL, strerror(errno));
 	    }
+	    exit(0);
 	}
-	waitpid(jpid, &status, 0);		/* wait for job to finish */
-	if (job->input)				/* wait for input feeder to */
-	    waitpid(sjpid, &status, 0);		/* finish */
-	waitpid(mjpid, &status, 0);		/* wait for mailer to finish */
+	close(output[0]);
+	/* wait for all subprocesses to finish */
+	while ( wait(&status) != -1 )
+	    ;
     }
     exit(0);
 }
