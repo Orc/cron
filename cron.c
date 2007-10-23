@@ -286,6 +286,31 @@ daemonize()
 }
 
 
+time_t ct_dirtime;
+
+
+/* see if the crondir has been modified since the last time
+ * we looked at it.  If it has, update our crontab collection.
+ */
+void
+checkcrondir()
+{
+    time_t newtime = mtime(".");
+
+    if (newtime != ct_dirtime) {
+	scanctdir();
+#if DEBUG
+	printf("scanctdir:  time WAS %s", ctime(&ct_dirtime));
+	printf("                  IS %s", ctime(&newtime));
+	printf("total %d, added %d, updated %d, active %d\n",
+		nrtabs, ct_add, ct_update, nrtabs - ct_inact);
+#endif
+	ct_dirtime = newtime;
+	printcrontab(tabs,nrtabs);
+    }
+}
+
+
 /* cron.
  */
 main(int argc, char **argv)
@@ -294,9 +319,8 @@ main(int argc, char **argv)
     Evmask Now;
     int i, j;
     int interval = 1;
-    int left;
+    int delay, adjust;
     struct stat st;
-    time_t ct_dirtime;
 
     pgm = argv[0];
     if ( argc > 1)
@@ -322,21 +346,24 @@ main(int argc, char **argv)
     signal(SIGHUP, SIG_IGN);
 
     while (1) {
-	time_t newtime = mtime(".");
 	struct tm *tm;
 	int adjust;
 
-	if (newtime != ct_dirtime) {
-	    scanctdir();
+	time(&ticks);
+	tm = localtime(&ticks);
+	adjust = 30 - tm->tm_sec;
+	if ( adjust ) error("adjust: %d", adjust);
+	/*
+	if ( adjust < -15 || adjust > 15 ) error("adjust: %d", adjust);
+	 */
 #if DEBUG
-	    printf("scanctdir:  time WAS %s", ctime(&ct_dirtime));
-	    printf("                  IS %s", ctime(&newtime));
-	    printf("total %d, added %d, updated %d, active %d\n",
-		    nrtabs, ct_add, ct_update, nrtabs - ct_inact);
+	printf("run Evmask:");printtrig(&Now); putchar('\n');
 #endif
-	    ct_dirtime = newtime;
-	    printcrontab(tabs,nrtabs);
-	}
+
+	for (delay = adjust + (60 * interval); delay > 0; delay = sleep(delay))
+	    ;
+
+	checkcrondir();
 
 	time(&ticks);
 	tm = localtime(&ticks);
@@ -347,16 +374,5 @@ main(int argc, char **argv)
 		if ( (tabs[i].flags & ACTIVE) && triggered(&Now, &(tabs[i].list[j].trigger)) )
 		    runjob(&tabs[i], &tabs[i].list[j]);
 
-	adjust = 30 - tm->tm_sec;
-	if ( adjust ) error("adjust: %d", adjust);
-	/*
-	if ( adjust < -15 || adjust > 15 ) error("adjust: %d", adjust);
-	 */
-#if DEBUG
-	printf("run Evmask:");printtrig(&Now); putchar('\n');
-#endif
-
-	for (left = adjust + (60 * interval); left > 0; left = sleep(left))
-	    ;
     }
 }
