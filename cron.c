@@ -352,10 +352,10 @@ main(int argc, char **argv)
 	time(&ticks);
 	tm = localtime(&ticks);
 	adjust = 30 - tm->tm_sec;
-	if ( adjust ) error("adjust: %d", adjust);
 	/*
-	if ( adjust < -15 || adjust > 15 ) error("adjust: %d", adjust);
+	if ( adjust ) error("adjust: %d", adjust);
 	 */
+	if ( adjust < -15 || adjust > 15 ) error("adjust: %d", adjust);
 #if DEBUG
 	printf("run Evmask:");printtrig(&Now); putchar('\n');
 #endif
