@@ -301,10 +301,10 @@ tmtoEvmask(struct tm *tm, int interval, Evmask *time)
 	if (tm->tm_min + i < 60)
 	    sminute(time, tm->tm_min+i);
 
-    shour(time, tm->tm_hour);
-    smday(time, tm->tm_mday);
-    smonth(time,tm->tm_mon);
-    swday(time, tm->tm_wday);
+    shour(time,   tm->tm_hour);
+    smday(time,   tm->tm_mday);
+    smonth(time,1+tm->tm_mon);
+    swday(time,   tm->tm_wday);
 }
 
 
