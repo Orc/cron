@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <syslog.h>
 #include <stdarg.h>
 #include <dirent.h>
 #include <errno.h>
@@ -58,8 +57,7 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
     if ( (jpid=fork()) == -1 )
 	fatal("job fork(): %s", strerror(errno));
     else if ( jpid == 0 ) {			/* the job to run */
-	syslog(LOG_INFO, "(%s) CMD (%s)",usr->pw_name,job->command);
-	closelog();
+	info("(%s) CMD (%s)",usr->pw_name,job->command);
 
 	setsid();
 

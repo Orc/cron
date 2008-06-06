@@ -15,6 +15,8 @@
 int interactive = 1;
 int lineno;
 
+extern char *pgm;
+
 
 /* (re)allocate memory or die.
  */
@@ -34,14 +36,17 @@ xrealloc(void *elp, int nrel, int szel)
  * syslog, depending on whether (interactive) is set.
  */
 static void
-_error(char *fmt, va_list ptr)
+_error(int severity, char *fmt, va_list ptr)
 {
     if (interactive) {
 	vfprintf(stderr, fmt, ptr);
 	fputc('\n',stderr);
     }
-    else
-	vsyslog(LOG_ERR, fmt, ptr);
+    else {
+	openlog(pgm, LOG_PID|LOG_NDELAY, LOG_CRON);
+	vsyslog(severity, fmt, ptr);
+	closelog();
+    }
 }
 
 
@@ -52,8 +57,8 @@ error(char *fmt, ...)
 {
     va_list ptr;
 
-    va_start(ptr,fmt);
-    _error(fmt,ptr);
+    va_start(ptr, fmt);
+    _error(LOG_ERR, fmt, ptr);
     va_end(ptr);
 }
 
@@ -65,10 +70,23 @@ fatal(char *fmt,...)
 {
     va_list ptr;
 
-    va_start(ptr,fmt);
-    _error(fmt,ptr);
+    va_start(ptr, fmt);
+    _error(LOG_ERR, fmt, ptr);
     va_end(ptr);
     exit(1);
+}
+
+
+/* log something non-fatal
+ */
+void
+info(char *fmt, ...)
+{
+    va_list ptr;
+
+    va_start(ptr, fmt);
+    _error(LOG_INFO, fmt, ptr);
+    va_end(ptr);
 }
 
 

@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <syslog.h>
 #include <string.h>
 #include <utime.h>
 #if HAVE_LIBGEN_H
@@ -18,7 +17,9 @@
 
 #include "cron.h"
 
-char *pgm;
+char *pgm = "crontab";
+
+extern int interactive;
 
 void
 usage()
@@ -260,9 +261,8 @@ main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    openlog("crontab", LOG_PID, LOG_CRON);
-    syslog(LOG_INFO, (strcmp(whoami,pwd->pw_name) == 0) ? "(%s) %s"
-							: "(%s) %s (%s)",
+    interactive=0;
+    info((strcmp(whoami,pwd->pw_name) == 0) ? "(%s) %s" : "(%s) %s (%s)",
 				whoami, what, pwd->pw_name);
     if (list) {
 	if ( !cat(pwd->pw_name) )

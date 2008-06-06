@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <signal.h>
-#include <syslog.h>
 #include <paths.h>
 #include <sys/times.h>
 
@@ -319,7 +318,7 @@ main(int argc, char **argv)
     Evmask Now;
     int i, j;
     int interval = 1;
-    int delay, adjust;
+    unsigned int delay;
     struct stat st;
 
     pgm = argv[0];
@@ -339,8 +338,7 @@ main(int argc, char **argv)
 
     daemonize();
 
-    openlog("cron", LOG_PID, LOG_CRON);
-    syslog(LOG_INFO, "startup");
+    info("startup");
 
     signal(SIGCHLD, eat);
     signal(SIGHUP, SIG_IGN);
@@ -351,7 +349,7 @@ main(int argc, char **argv)
 
 	time(&ticks);
 	tm = localtime(&ticks);
-	adjust = 30 - tm->tm_sec;
+	adjust = (30 - tm->tm_sec) % 60;
 	/*
 	if ( adjust ) error("adjust: %d", adjust);
 	 */
@@ -360,8 +358,20 @@ main(int argc, char **argv)
 	printf("run Evmask:");printtrig(&Now); putchar('\n');
 #endif
 
-	for (delay = adjust + (60 * interval); delay > 0; delay = sleep(delay))
-	    ;
+	delay = (60 * interval) + adjust;
+	if ( delay > 300 ) 
+	    error("long delay: %d", delay);
+
+	while ( delay ) {
+	    unsigned int left = sleep(delay);
+
+	    if ( left > delay ) {
+		error("sleep(%d) returned %d", delay, left);
+		--delay;
+	    }
+	    else
+		delay = left;
+	}
 
 	checkcrondir();
 
