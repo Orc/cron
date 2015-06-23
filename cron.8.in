@@ -46,4 +46,4 @@ Where the crontabs are.
 .Xr crontab 1 ,
 .Xr crontab 5 .
 .Sh AUTHOR
-David Parsons (orc@pell.chi.il.us)
+David Parsons (orc@pell.portland.or.us)
