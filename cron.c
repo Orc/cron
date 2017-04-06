@@ -210,7 +210,7 @@ triggered(Evmask *t, Evmask *m)
 /* print the contents of a crontab
  */
 #if DEBUG
-void
+int
 printcrontab(crontab *tab, int nrtab)
 {
     int i, j;
@@ -232,6 +232,7 @@ printcrontab(crontab *tab, int nrtab)
 		}
 	    }
 	}
+    return 1
 }
 #else
 #define printcrontab(t,s)	1
@@ -320,7 +321,6 @@ main(int argc, char **argv)
     int i, j;
     int interval = 1;
     unsigned int delay;
-    struct stat st;
 
     pgm = argv[0];
     if ( argc > 1)

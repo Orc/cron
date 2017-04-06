@@ -31,7 +31,7 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 {
     pid_t jpid;
     char *home = usr->pw_dir ? usr->pw_dir : "/tmp";
-    int i, rc, size, status;
+    int status;
     int input[2], output[2];
     char peek[1];
     char subject[120];
@@ -68,7 +68,7 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 	close(1); dup2(output[1], 1);
 	close(2); dup2(1, 2); close(output[1]);
 
-	execle(shell, "sh", "-c", job->command, 0L, tab->env);
+	execle(shell, "sh", "-c", job->command, (char*)0, tab->env);
 	perror(shell);
     }
     else {					/* runjobprocess() */
@@ -91,7 +91,7 @@ runjobprocess(crontab *tab,cron *job,struct passwd *usr)
 		snprintf(subject, sizeof subject,
 			 "Cron <%s> %s", to, job->command);
 
-		execle(PATH_MAIL, "mail", "-s", subject, to, 0L, tab->env);
+		execle(PATH_MAIL, "mail", "-s", subject, to, (char*)0, tab->env);
 		fatal("can't exec(\"%s\"): %s", PATH_MAIL, strerror(errno));
 	    }
 	    exit(0);
