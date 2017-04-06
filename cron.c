@@ -312,6 +312,7 @@ checkcrondir()
 
 /* cron.
  */
+int
 main(int argc, char **argv)
 {
     time_t ticks;

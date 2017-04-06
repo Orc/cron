@@ -69,7 +69,10 @@ char *fgetlol(FILE*);
 char *firstnonblank(char*);
 void error(char*,...);
 void fatal(char*,...);
+void info(char*,...);
 char *jobenv(crontab*,char*);
+void xchdir(char*);
+
 
 extern int interactive;
 extern int lineno;

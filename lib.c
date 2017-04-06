@@ -1,6 +1,8 @@
 /*
  * misc functions
  */
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -9,6 +11,8 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <syslog.h>
+#include <string.h>
+#include <ctype.h>
 
 #include "cron.h"
 
@@ -29,6 +33,7 @@ xrealloc(void *elp, int nrel, int szel)
 	return ret;
 
     fatal("xrealloc: %s", strerror(errno));
+    return 0;
 }
 
 
@@ -100,7 +105,7 @@ fgetlol(FILE *f)
     static char *line = 0;
     static int szl = 0;
     int nrl = 0;
-    register c;
+    register int c;
 
     while ( (c = fgetc(f)) != EOF ) {
 	EXPAND(line,szl,nrl+1);

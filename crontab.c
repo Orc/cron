@@ -1,6 +1,8 @@
 /*
  * crontab: read/write/delete/edit crontabs
  */
+#include "config.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -11,6 +13,7 @@
 #include <errno.h>
 #include <string.h>
 #include <utime.h>
+#include <ctype.h>
 #if HAVE_LIBGEN_H
 #   include <libgen.h>
 #endif
@@ -47,7 +50,7 @@ superpowers()
 int
 cat(char *file)
 {
-    register c;
+    register int c;
     FILE *f;
 
     superpowers();
@@ -71,7 +74,7 @@ newcrontab(char *file, char *name)
 {
     static crontab tab = { 0 };
     int tempfile = 0;
-    register c;
+    register int c;
     FILE *in, *out;
     struct utimbuf touch;
     int save_euid = geteuid();
@@ -140,6 +143,7 @@ newcrontab(char *file, char *name)
 	exit(0);
     }
     fatal("can't write to crontab: %s", strerror(errno));
+    return 0;
 }
 
 
@@ -211,6 +215,7 @@ visual(struct passwd *pwd)
 
 /* crontab
  */
+int
 main(int argc, char **argv)
 {
     int i;
@@ -264,6 +269,7 @@ main(int argc, char **argv)
     interactive=0;
     info((strcmp(whoami,pwd->pw_name) == 0) ? "(%s) %s" : "(%s) %s (%s)",
 				whoami, what, pwd->pw_name);
+    interactive=1;
     if (list) {
 	if ( !cat(pwd->pw_name) )
 	    fatal("no crontab for %s", pwd->pw_name);

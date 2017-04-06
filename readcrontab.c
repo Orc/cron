@@ -252,7 +252,11 @@ readcrontab(crontab *tab, FILE *f)
     cron job;
 
     lineno = 0;
-    while ( (logicalline=lineno+1), (s = fgetlol(f)) ) {
+    while (1) {
+	logicalline=lineno+1;
+	if ( (s = fgetlol(f)) == 0 )
+	    break;
+	
 	s = firstnonblank(s);
 
 	if (*s == 0 || *s == '#' || *s == '\n')
