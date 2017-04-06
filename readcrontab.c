@@ -246,9 +246,7 @@ setjobenv(crontab *tab, char *env)
 int
 readcrontab(crontab *tab, FILE *f)
 {
-    struct stat st;
     char *s;
-    struct passwd *user;
     cron job;
 
     lineno = 0;
