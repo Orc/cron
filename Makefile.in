@@ -35,7 +35,7 @@ clean:
 	rm -f $(progs) *.o
 
 spotless distclean: clean
-	rm -f @GENERATED_FILES@ @CONFIGURE_FILES@
+	@DISTCLEAN@ @GENERATED_FILES@ @CONFIGURE_FILES@
 
 cron.o: cron.c cron.h config.h
 crontab.o: crontab.c cron.h config.h

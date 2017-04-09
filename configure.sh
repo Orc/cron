@@ -32,6 +32,7 @@ if [ "IS_BROKEN_CC" ]; then
 	fi ;;
     esac
 fi
+unset _MK_LIBRARIAN
 
 AC_SCALAR_TYPES
 AC_CHECK_ALLOCA || AC_FAIL "$TARGET requires alloca()"
