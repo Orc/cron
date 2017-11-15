@@ -28,8 +28,10 @@ install: $(progs)
 
 
 cron: cron.o runjob.o $(common)
+	$(CC) -o $@ cron.o runjob.o $(common)
 
 crontab: crontab.o $(common)
+	$(CC) -o $@ crontab.o $(common)
 
 clean:
 	rm -f $(progs) *.o

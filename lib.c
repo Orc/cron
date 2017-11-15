@@ -199,3 +199,37 @@ xchdir(char *path)
     if (chdir(path) == -1)
 	fatal("%s: %s", path, strerror(errno));
 }
+
+
+#ifndef HAVE_SETREGID
+
+int
+setregid(gid_t rgid, gid_t egid)
+{
+#ifdef HAVE_SETEGID
+    if ( setegid(egid) != 0 )
+	return -1;
+#endif
+    if ( setgid(rgid) != 0 )
+	return -1;
+    return 0;
+}
+
+#endif
+
+
+#ifndef HAVE_SETREUID
+
+int
+setreuid(gid_t ruid, gid_t euid)
+{
+#ifdef HAVE_SETEUID
+    if ( seteuid(euid) != 0 )
+	return -1;
+#endif
+    if ( setuid(ruid) != 0 )
+	return -1;
+    return 0;
+}
+
+#endif

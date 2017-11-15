@@ -42,6 +42,16 @@ if AC_CHECK_FUNCS basename; then
     AC_CHECK_HEADERS libgen.h
 fi
 
+if ! AC_CHECK_FUNCS setregid; then
+    AC_CHECK_FUNCS setegid
+    AC_CHECK_FUNCS setgid || AC_FAIL "$TARGET requires setgid()"
+fi
+
+if ! AC_CHECK_FUNCS setreuid; then
+    AC_CHECK_FUNCS seteuid
+    AC_CHECK_FUNCS setuid || AC_FAIL "$TARGET requires setuid()"
+fi
+
 if [ "$WITH_MAIL" ]; then
     AC_DEFINE PATH_MAIL \"${WITH_MAIL}\"
 else
